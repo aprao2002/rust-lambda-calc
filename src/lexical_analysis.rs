@@ -42,12 +42,12 @@ lazy_static! {
     static ref token_rules: Vec<TokenRule> = vec![
         TokenRule {
             token_class: TokenClass::Def,
-            regex: Regex::new(r"\A(?<token_text>def)($|\s)")
+            regex: Regex::new(r"\A(?<token_text>def)\b")
                 .expect("Unable to compile Def rule regex."),
         },
         TokenRule {
             token_class: TokenClass::Eval,
-            regex: Regex::new(r"\A(?<token_text>eval)($|\s)")
+            regex: Regex::new(r"\A(?<token_text>eval)\b")
                 .expect("Unable to compile Eval rule regex."),
         },
         TokenRule {
@@ -57,7 +57,7 @@ lazy_static! {
         },
         TokenRule {
             token_class: TokenClass::Equals,
-            regex: Regex::new(r"\A(?<token_text>=)($|\s)")
+            regex: Regex::new(r"\A(?<token_text>=)")
                 .expect("Unable to compile Identifier rule regex."),
         },
         TokenRule {
@@ -81,7 +81,7 @@ lazy_static! {
         },
         TokenRule {
             token_class: TokenClass::Comment,
-            regex: Regex::new(r"\A(?<token_text>//[^\n]*)($|\s)")
+            regex: Regex::new(r"\A(?<token_text>//[^\n]*)")
                 .expect("Unable to compile Comment rule regex."),
         },
         TokenRule {
@@ -110,50 +110,47 @@ fn get_rule_for_token_class(token_class: TokenClass) -> Option<&'static TokenRul
 struct RuleApplicationResult<'a> {
     token_rule: &'static TokenRule,
     token_text: &'a str,
-    full_match_len: usize,
 }
 
+// Allows equality comparisons between RuleApplicationResult objects. Compares
+// the objects by (1) making sure they point to the same token_rule, and (2)
+// contain the same token_text.
 impl<'a> PartialEq for RuleApplicationResult<'a> {
     fn eq(&self, other: &Self) -> bool {
         return std::ptr::eq(self.token_rule, other.token_rule)
-            && self.token_text == other.token_text
-            && self.full_match_len == other.full_match_len;
+            && self.token_text == other.token_text;
     }
 }
 
+// Counts the number of occurrences of target_char in in_str.
 fn count_occurrences(in_str: &str, target_char: char) -> usize {
     return in_str.chars().fold(0, |accum, curr_char| {
         accum + ((curr_char == target_char) as usize)
     });
 }
 
+// Finds the lexer rule that matches the longest substring starting from the
+// start of input_str, and returns a RuleApplicationResult object describing the
+// match.
 fn apply_longest_matching_rule<'a>(input_str: &'a str) -> RuleApplicationResult<'a> {
     let mut out_token_rule = get_rule_for_token_class(TokenClass::Error)
         .expect("Unable to find token rule for Error token class.");
     let mut out_token_text = "";
-    let mut out_match_len: usize = 0;
 
     for token_rule in token_rules.iter() {
-        match token_rule.regex.captures(input_str) {
+        match token_rule.regex.find(input_str) {
             None => continue,
-            Some(captures_obj) => {
-                let full_match = captures_obj.get(0).expect("captures_obj.get(0) was None.");
-                let token_text_match = captures_obj
-                    .name("token_text")
-                    .expect("captures_obj did not have a token_text capture group.");
-
-                if full_match.len() > out_match_len {
+            Some(match_obj) => {
+                if match_obj.len() > out_token_text.len() {
                     out_token_rule = token_rule;
-                    out_token_text = &input_str[token_text_match.range()];
-                    out_match_len = full_match.len();
+                    out_token_text = &input_str[match_obj.range()];
                 }
             }
-        };
+        }
     }
     return RuleApplicationResult {
         token_rule: out_token_rule,
         token_text: out_token_text,
-        full_match_len: out_match_len,
     };
 }
 
@@ -204,11 +201,11 @@ fn make_token_stream(program_str: &str) -> Vec<Token> {
             line_num: curr_line_num,
         };
 
-        // Defer the addition of error tokens so that we can merge consecutive 
+        // Defer the addition of error tokens so that we can merge consecutive
         // ones into a single big error token.
         if new_token.token_class == TokenClass::Error {
             trailing_error_tokens.push(new_token);
-        
+
         // We did not just find an error token, so add any deferred error tokens
         // and the new (non-error) token.
         } else {
@@ -261,7 +258,6 @@ mod tests {
                     token_rule: get_rule_for_token_class(TokenClass::Comment)
                         .expect("Unable to get rule for token class {TokenClass::Comment}"),
                     token_text: r"// This is a comment.",
-                    full_match_len: r"// This is a comment.".len(),
                 },
             ),
             (
@@ -270,7 +266,6 @@ mod tests {
                     token_rule: get_rule_for_token_class(TokenClass::Eval)
                         .expect("Unable to get rule for token class {TokenClass::Eval}"),
                     token_text: r"eval",
-                    full_match_len: r"eval ".len(),
                 },
             ),
         ];
