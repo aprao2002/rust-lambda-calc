@@ -4,7 +4,7 @@ use std::{cmp::min, usize};
 use lazy_static::lazy_static;
 use regex::Regex;
 
-// The different classes of tokens that compose the language.
+/// The different classes of tokens that compose the language.
 #[derive(PartialEq, Eq, Debug, Clone, Copy)]
 enum TokenClass {
     Def,
@@ -20,7 +20,7 @@ enum TokenClass {
     Error,
 }
 
-// Represents a single token of the language.
+/// Represents a single token of the language.
 #[derive(PartialEq, Eq, Debug)]
 struct Token {
     token_class: TokenClass,
@@ -42,57 +42,48 @@ lazy_static! {
     static ref token_rules: Vec<TokenRule> = vec![
         TokenRule {
             token_class: TokenClass::Def,
-            regex: Regex::new(r"\A(?<token_text>def)\b")
-                .expect("Unable to compile Def rule regex."),
+            regex: Regex::new(r"\A(def)\b").expect("Unable to compile Def rule regex."),
         },
         TokenRule {
             token_class: TokenClass::Eval,
-            regex: Regex::new(r"\A(?<token_text>eval)\b")
-                .expect("Unable to compile Eval rule regex."),
+            regex: Regex::new(r"\A(eval)\b").expect("Unable to compile Eval rule regex."),
         },
         TokenRule {
             token_class: TokenClass::Identifier,
-            regex: Regex::new(r"\A(?<token_text>([a-zA-Z]+[a-zA-Z0-9_]*))")
+            regex: Regex::new(r"\A([a-zA-Z_]+[a-zA-Z0-9_]*)")
                 .expect("Unable to compile Identifier rule regex."),
         },
         TokenRule {
             token_class: TokenClass::Equals,
-            regex: Regex::new(r"\A(?<token_text>=)")
-                .expect("Unable to compile Identifier rule regex."),
+            regex: Regex::new(r"\A(=)").expect("Unable to compile Identifier rule regex."),
         },
         TokenRule {
             token_class: TokenClass::Semicolon,
-            regex: Regex::new(r"\A(?<token_text>;)")
-                .expect("Unable to compile Semicolon rule regex."),
+            regex: Regex::new(r"\A(;)").expect("Unable to compile Semicolon rule regex."),
         },
         TokenRule {
             token_class: TokenClass::Lambda,
-            regex: Regex::new(r"\A(?<token_text>\\)")
-                .expect("Unable to compile Lambda rule regex."),
+            regex: Regex::new(r"\A(\\)").expect("Unable to compile Lambda rule regex."),
         },
         TokenRule {
             token_class: TokenClass::Dot,
-            regex: Regex::new(r"\A(?<token_text>\.)").expect("Unable to compile Dot rule regex."),
+            regex: Regex::new(r"\A(\.)").expect("Unable to compile Dot rule regex."),
         },
         TokenRule {
             token_class: TokenClass::Parentheses,
-            regex: Regex::new(r"\A(?<token_text>\(|\))")
-                .expect("Unable to compile Parentheses rule regex."),
+            regex: Regex::new(r"\A(\(|\))").expect("Unable to compile Parentheses rule regex."),
         },
         TokenRule {
             token_class: TokenClass::Comment,
-            regex: Regex::new(r"\A(?<token_text>//[^\n]*)")
-                .expect("Unable to compile Comment rule regex."),
+            regex: Regex::new(r"\A(//[^\n]*)").expect("Unable to compile Comment rule regex."),
         },
         TokenRule {
             token_class: TokenClass::Whitespace,
-            regex: Regex::new(r"\A(?<token_text>\s+)")
-                .expect("Unable to compile Whitespace rule regex."),
+            regex: Regex::new(r"\A(\s+)").expect("Unable to compile Whitespace rule regex."),
         },
         TokenRule {
             token_class: TokenClass::Error,
-            regex: Regex::new(r"(?m)\A(?<token_text>.+?)")
-                .expect("Unable to compile Error rule regex."),
+            regex: Regex::new(r"\A(.)").expect("Unable to compile Error rule regex."),
         },
     ];
 }
@@ -124,9 +115,10 @@ impl<'a> PartialEq for RuleApplicationResult<'a> {
 
 // Counts the number of occurrences of target_char in in_str.
 fn count_occurrences(in_str: &str, target_char: char) -> usize {
-    return in_str.chars().fold(0, |accum, curr_char| {
-        accum + ((curr_char == target_char) as usize)
-    });
+    return in_str
+        .chars()
+        .filter(|&curr_char| curr_char == target_char)
+        .count();
 }
 
 // Finds the lexer rule that matches the longest substring starting from the
@@ -177,9 +169,9 @@ fn merge_error_tokens(error_tokens: &Vec<Token>) -> Token {
     };
 }
 
-// Given a string, returns a vector of tokens that comprise that string.
-// Discards 'uninteresting' tokens like comments and whitespace.
-fn make_token_stream(program_str: &str) -> Vec<Token> {
+/// Given a string, returns a vector of tokens that comprise that string.
+/// Discards comments and whitespace if discard_uninteresting is true.
+fn make_token_stream(program_str: &str, discard_uninteresting: bool) -> Vec<Token> {
     // Track the current index into program_str we are inspecting, the current
     // line number, and the current vector of output tokens we will return.
     let mut curr_idx: usize = 0;
@@ -193,6 +185,16 @@ fn make_token_stream(program_str: &str) -> Vec<Token> {
     while curr_idx < program_str.len() {
         // Apply the longest matching rule.
         let rule_application_result = apply_longest_matching_rule(&program_str[curr_idx..]);
+
+        // Skip uninteresting tokens if requested to do so.
+        if discard_uninteresting
+            && (rule_application_result.token_rule.token_class == TokenClass::Comment
+                || rule_application_result.token_rule.token_class == TokenClass::Whitespace)
+        {
+            curr_idx += rule_application_result.token_text.len();
+            curr_line_num += count_occurrences(rule_application_result.token_text, '\n');
+            continue;
+        }
 
         // Construct the new token to add.
         let new_token = Token {
@@ -209,7 +211,7 @@ fn make_token_stream(program_str: &str) -> Vec<Token> {
         // We did not just find an error token, so add any deferred error tokens
         // and the new (non-error) token.
         } else {
-            if trailing_error_tokens.len() > 0 {
+            if !trailing_error_tokens.is_empty() {
                 out_tokens.push(merge_error_tokens(&trailing_error_tokens));
                 trailing_error_tokens.clear();
             }
@@ -223,7 +225,7 @@ fn make_token_stream(program_str: &str) -> Vec<Token> {
     }
 
     // Handle edge case of trailing error tokens.
-    if trailing_error_tokens.len() > 0 {
+    if !trailing_error_tokens.is_empty() {
         out_tokens.push(merge_error_tokens(&trailing_error_tokens));
     }
 
@@ -288,9 +290,9 @@ mod tests {
     }
 
     // Test if make_token_stream returns the desired token stream for a
-    // well-formed program.
+    // well-formed program when discard_uninteresting is false.
     #[test]
-    fn test_make_token_stream_simple() {
+    fn test_make_token_stream_no_discarding() {
         let program_str = r"// This is a comment.
 def identity_fn = (\x.x);";
 
@@ -372,7 +374,72 @@ def identity_fn = (\x.x);";
             },
         ];
 
-        let produced_token_stream = make_token_stream(program_str);
+        let produced_token_stream = make_token_stream(program_str, false);
+
+        assert_token_stream_has_prefix(&produced_token_stream, &expected_token_stream_prefix);
+    }
+
+    // Test if make_token_stream returns the desired token stream for a
+    // well-formed program when discard_uninteresting is true.
+    #[test]
+    fn test_make_token_stream_with_discarding() {
+        let program_str = r"// This is a comment.
+def identity_fn = (\x.x);";
+
+        let expected_token_stream_prefix = vec![
+            Token {
+                token_class: TokenClass::Def,
+                token_text: String::from(r"def"),
+                line_num: 1,
+            },
+            Token {
+                token_class: TokenClass::Identifier,
+                token_text: String::from(r"identity_fn"),
+                line_num: 1,
+            },
+            Token {
+                token_class: TokenClass::Equals,
+                token_text: String::from(r"="),
+                line_num: 1,
+            },
+            Token {
+                token_class: TokenClass::Parentheses,
+                token_text: String::from(r"("),
+                line_num: 1,
+            },
+            Token {
+                token_class: TokenClass::Lambda,
+                token_text: String::from(r"\"),
+                line_num: 1,
+            },
+            Token {
+                token_class: TokenClass::Identifier,
+                token_text: String::from(r"x"),
+                line_num: 1,
+            },
+            Token {
+                token_class: TokenClass::Dot,
+                token_text: String::from(r"."),
+                line_num: 1,
+            },
+            Token {
+                token_class: TokenClass::Identifier,
+                token_text: String::from(r"x"),
+                line_num: 1,
+            },
+            Token {
+                token_class: TokenClass::Parentheses,
+                token_text: String::from(r")"),
+                line_num: 1,
+            },
+            Token {
+                token_class: TokenClass::Semicolon,
+                token_text: String::from(r";"),
+                line_num: 1,
+            },
+        ];
+
+        let produced_token_stream = make_token_stream(program_str, true);
 
         assert_token_stream_has_prefix(&produced_token_stream, &expected_token_stream_prefix);
     }
@@ -413,7 +480,7 @@ def identity_fn = (\x.x);";
             },
         ];
 
-        let produced_token_stream = make_token_stream(program_str);
+        let produced_token_stream = make_token_stream(program_str, false);
 
         assert_token_stream_has_prefix(&produced_token_stream, &expected_token_stream_prefix);
     }
