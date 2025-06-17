@@ -1,12 +1,11 @@
-use core::error;
-use std::{cmp::min, usize};
+use std::usize;
 
 use lazy_static::lazy_static;
 use regex::Regex;
 
 /// The different classes of tokens that compose the language.
 #[derive(PartialEq, Eq, Debug, Clone, Copy)]
-enum TokenClass {
+pub enum TokenClass {
     Def,
     Eval,
     Identifier,
@@ -22,10 +21,10 @@ enum TokenClass {
 
 /// Represents a single token of the language.
 #[derive(PartialEq, Eq, Debug)]
-struct Token {
-    token_class: TokenClass,
-    token_text: String,
-    line_num: usize,
+pub struct Token {
+    pub token_class: TokenClass,
+    pub token_text: String,
+    pub line_num: usize,
 }
 
 // Represents how to recognize a token class.
@@ -171,7 +170,7 @@ fn merge_error_tokens(error_tokens: &Vec<Token>) -> Token {
 
 /// Given a string, returns a vector of tokens that comprise that string.
 /// Discards comments and whitespace if discard_uninteresting is true.
-fn make_token_stream(program_str: &str, discard_uninteresting: bool) -> Vec<Token> {
+pub fn make_token_stream(program_str: &str, discard_uninteresting: bool) -> Vec<Token> {
     // Track the current index into program_str we are inspecting, the current
     // line number, and the current vector of output tokens we will return.
     let mut curr_idx: usize = 0;
