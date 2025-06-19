@@ -1,6 +1,20 @@
 use crate::lexical_analysis::{Token, TokenClass};
 
-enum ExprNode {
+/// Represents a 'def' or 'eval' statement.
+#[derive(Debug, PartialEq, Eq)]
+pub enum Statement {
+    Def {
+        def_name: String,
+        def_body: Box<ExprNode>,
+    },
+    Eval {
+        eval_body: Box<ExprNode>,
+    },
+}
+
+/// Represents a lambda-calculus expression.
+#[derive(Debug, PartialEq, Eq)]
+pub enum ExprNode {
     FnDef {
         formal_param: String,
         fn_body: Box<ExprNode>,
@@ -14,16 +28,8 @@ enum ExprNode {
     },
 }
 
-pub enum Statement {
-    Def {
-        def_name: String,
-        def_body: Box<ExprNode>,
-    },
-    Eval {
-        eval_body: Box<ExprNode>,
-    },
-}
-
+/// Represents a parsing error.
+#[derive(Debug, PartialEq, Eq)]
 pub enum ParseError {
     UnexpectedTokenClass {
         expected_token_class: TokenClass,
@@ -38,6 +44,7 @@ pub enum ParseError {
     UnexpectedEndOfInput,
 }
 
+// Tries to parse a token of the requested class at tokens[start_idx].
 fn try_token_class(
     tokens: &Vec<Token>,
     start_idx: usize,
@@ -59,6 +66,7 @@ fn try_token_class(
     };
 }
 
+// Tries to parse a token containing the requested text at tokens[start_idx].
 fn try_token_text<'a, 'b>(
     tokens: &'a Vec<Token>,
     start_idx: usize,
@@ -80,6 +88,7 @@ fn try_token_text<'a, 'b>(
     };
 }
 
+// Tries to parse an expression that looks like `\[IDENTIFIER].[EXPR]`.
 fn try_lambda_rule(
     tokens: &Vec<Token>,
     start_idx: usize,
@@ -99,6 +108,7 @@ fn try_lambda_rule(
     ));
 }
 
+// Tries to parse an expression that looks like `([EXPR])`.
 fn try_parenthesis_expr_rule(
     tokens: &Vec<Token>,
     start_idx: usize,
@@ -110,6 +120,7 @@ fn try_parenthesis_expr_rule(
     return Ok((expr_node, start_idx));
 }
 
+// Tries to parse an expression that looks like `[IDENTIFIER]`.
 fn try_var_expr_rule(
     tokens: &Vec<Token>,
     start_idx: usize,
@@ -124,6 +135,7 @@ fn try_var_expr_rule(
     ));
 }
 
+// Tries to parse according to the production `atom -> (e) | v`.
 fn try_atom_rule(
     tokens: &Vec<Token>,
     start_idx: usize,
@@ -132,44 +144,69 @@ fn try_atom_rule(
         .or_else(|_| try_var_expr_rule(tokens, start_idx));
 }
 
-fn try_non_app_rule(
+// Tries to parse according to the production `app -> atom e`, and then 'fixes' 
+// the tree to make it left associative if needed.
+fn try_apply_atom_to_expr_rule(
     tokens: &Vec<Token>,
     start_idx: usize,
 ) -> Result<(Box<ExprNode>, usize), ParseError> {
-    return try_lambda_rule(tokens, start_idx).or_else(|_| try_atom_rule(tokens, start_idx));
+    let (outer_fn_body, start_idx) = try_atom_rule(tokens, start_idx)?;
+    let outer_actual_arg_in_parentheses = tokens[start_idx].token_text == "(";
+    let (outer_actual_arg, start_idx) = try_expr_rule(tokens, start_idx)?;
+
+    match (*outer_actual_arg, outer_actual_arg_in_parentheses) {
+        // If the expression the atom is applied to is a function application,
+        // rewire the parse tree to maintain left-associativity.
+        (
+            ExprNode::FnApp {
+                fn_body: inner_fn_body,
+                actual_arg: inner_actual_arg,
+            },
+            false,
+        ) => {
+            return Ok((
+                Box::new(ExprNode::FnApp {
+                    fn_body: Box::new(ExprNode::FnApp {
+                        fn_body: outer_fn_body,
+                        actual_arg: inner_fn_body,
+                    }),
+                    actual_arg: inner_actual_arg,
+                }),
+                start_idx,
+            ));
+        }
+
+        // The actual argument of the atom is not a function application, so no
+        // rewiring is needed.
+        (outer_actual_arg, _) => {
+            return Ok((
+                Box::new(ExprNode::FnApp {
+                    fn_body: outer_fn_body,
+                    actual_arg: Box::new(outer_actual_arg),
+                }),
+                start_idx,
+            ));
+        }
+    }
 }
 
-fn try_apply_atom_to_non_app_rule(
+fn try_application_rule(
     tokens: &Vec<Token>,
     start_idx: usize,
 ) -> Result<(Box<ExprNode>, usize), ParseError> {
-    let (atom_expr_node, start_idx) = try_atom_rule(tokens, start_idx)?;
-    let (non_app_expr_node, start_idx) = try_non_app_rule(tokens, start_idx)?;
-
-    return Ok((
-        Box::new(ExprNode::FnApp {
-            fn_body: atom_expr_node,
-            actual_arg: non_app_expr_node,
-        }),
-        start_idx,
-    ));
-}
-
-fn try_non_lambda_rule(
-    tokens: &Vec<Token>,
-    start_idx: usize,
-) -> Result<(Box<ExprNode>, usize), ParseError> {
-    return try_apply_atom_to_non_app_rule(tokens, start_idx)
+    return try_apply_atom_to_expr_rule(tokens, start_idx)
         .or_else(|_| try_atom_rule(tokens, start_idx));
 }
 
+// Tries to parse according to the production `e -> lambda | non_lam`.
 fn try_expr_rule(
     tokens: &Vec<Token>,
     start_idx: usize,
 ) -> Result<(Box<ExprNode>, usize), ParseError> {
-    return try_lambda_rule(tokens, start_idx).or_else(|_| try_non_lambda_rule(tokens, start_idx));
+    return try_lambda_rule(tokens, start_idx).or_else(|_| try_application_rule(tokens, start_idx));
 }
 
+// Tries to parse a `def` statement.
 fn try_def_statement_rule(
     tokens: &Vec<Token>,
     start_idx: usize,
@@ -178,6 +215,7 @@ fn try_def_statement_rule(
     let (def_name_token, start_idx) = try_token_class(tokens, start_idx, TokenClass::Identifier)?;
     let (_, start_idx) = try_token_class(tokens, start_idx, TokenClass::Equals)?;
     let (def_body, start_idx) = try_expr_rule(tokens, start_idx)?;
+    let (_, start_idx) = try_token_class(tokens, start_idx, TokenClass::Semicolon)?;
 
     return Ok((
         Statement::Def {
@@ -188,12 +226,14 @@ fn try_def_statement_rule(
     ));
 }
 
+// Tries to parse an `eval` statement.
 fn try_eval_statement_rule(
     tokens: &Vec<Token>,
     start_idx: usize,
 ) -> Result<(Statement, usize), ParseError> {
     let (_, start_idx) = try_token_class(tokens, start_idx, TokenClass::Eval)?;
     let (eval_body_box, start_idx) = try_expr_rule(tokens, start_idx)?;
+    let (_, start_idx) = try_token_class(tokens, start_idx, TokenClass::Semicolon)?;
 
     return Ok((
         Statement::Eval {
@@ -203,6 +243,7 @@ fn try_eval_statement_rule(
     ));
 }
 
+// Tries to parse a `def` or `eval` statement.
 fn try_statement_rule(
     tokens: &Vec<Token>,
     start_idx: usize,
@@ -211,6 +252,12 @@ fn try_statement_rule(
         .or_else(|_| try_eval_statement_rule(tokens, start_idx));
 }
 
+/// Uses recursive descent to parse the given vector of tokens into a vector of
+/// `def` or `eval` statements.
+///
+/// Assumes that the input token vector has discarded whitespace and comments
+/// (i.e. it was produced via run_lexical_analysis with
+/// `discard_uninteresting = true`).
 pub fn parse_recursive_descent(tokens: &Vec<Token>) -> Result<Vec<Statement>, ParseError> {
     let mut statements = Vec::new();
     let mut start_idx = 0;
@@ -222,4 +269,255 @@ pub fn parse_recursive_descent(tokens: &Vec<Token>) -> Result<Vec<Statement>, Pa
     }
 
     return Ok(statements);
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::lexical_analysis::run_lexical_analysis;
+
+    use super::*;
+
+    // Test if we can parse a simple def statement.
+    #[test]
+    fn test_single_simple_def_statement() {
+        // Initialize the test program string and run the lexer on it.
+        let program_str = r"def identity = \x. x;";
+        let program_tokens = run_lexical_analysis(program_str, true);
+
+        // Initialize the expected output.
+        let expected_output = vec![Statement::Def {
+            def_name: String::from("identity"),
+            def_body: Box::new(ExprNode::FnDef {
+                formal_param: String::from("x"),
+                fn_body: Box::new(ExprNode::Var {
+                    var_name: String::from("x"),
+                }),
+            }),
+        }];
+
+        // Run the parser.
+        let generated_output = parse_recursive_descent(&program_tokens)
+            .expect("parse_recursive_descent returned unexpected parse error");
+
+        // Check parser output matches expected output.
+        assert_eq!(generated_output, expected_output);
+    }
+
+    // Test if we can parse a simple eval statement.
+    #[test]
+    fn test_single_simple_eval_statement() {
+        // Initialize the test program string and run the lexer on it.
+        let program_str = r"eval (\x. x)(\y. y);";
+        let program_tokens = run_lexical_analysis(program_str, true);
+
+        // Initialize the expected output.
+        let expected_output = vec![Statement::Eval {
+            eval_body: Box::new(ExprNode::FnApp {
+                fn_body: Box::new(ExprNode::FnDef {
+                    formal_param: String::from("x"),
+                    fn_body: Box::new(ExprNode::Var {
+                        var_name: String::from("x"),
+                    }),
+                }),
+                actual_arg: Box::new(ExprNode::FnDef {
+                    formal_param: String::from("y"),
+                    fn_body: Box::new(ExprNode::Var {
+                        var_name: String::from("y"),
+                    }),
+                }),
+            }),
+        }];
+
+        // Run the parser.
+        let generated_output = parse_recursive_descent(&program_tokens)
+            .expect("parse_recursive_descent returned unexpected parse error");
+
+        // Check parser output matches expected output.
+        assert_eq!(generated_output, expected_output);
+    }
+
+    // Test if we parse function application as left associative.
+    #[test]
+    fn test_function_application_association() {
+        // Initialize the test program string and run the lexer on it.
+        let program_str = r"eval var_1 var_2 var_3;";
+        let program_tokens = run_lexical_analysis(program_str, true);
+
+        // Initialize the expected output.
+        let expected_output = vec![Statement::Eval {
+            eval_body: Box::new(ExprNode::FnApp {
+                fn_body: Box::new(ExprNode::FnApp {
+                    fn_body: Box::new(ExprNode::Var {
+                        var_name: String::from("var_1"),
+                    }),
+                    actual_arg: Box::new(ExprNode::Var {
+                        var_name: String::from("var_2"),
+                    }),
+                }),
+                actual_arg: Box::new(ExprNode::Var {
+                    var_name: String::from("var_3"),
+                }),
+            }),
+        }];
+
+        // Run the parser.
+        let generated_output = parse_recursive_descent(&program_tokens)
+            .expect("parse_recursive_descent returned unexpected parse error");
+
+        // Check parser output matches expected output.
+        assert_eq!(generated_output, expected_output);
+    }
+
+    // Test if we function application association respects parentheses.
+    #[test]
+    fn test_function_application_association_with_parentheses() {
+        // Initialize the test program string and run the lexer on it.
+        let program_str = r"eval var_1 (var_2 var_3);";
+        let program_tokens = run_lexical_analysis(program_str, true);
+
+        // Initialize the expected output.
+        let expected_output = vec![Statement::Eval {
+            eval_body: Box::new(ExprNode::FnApp {
+                fn_body: Box::new(ExprNode::Var {
+                    var_name: String::from("var_1"),
+                }),
+                actual_arg: Box::new(ExprNode::FnApp {
+                    fn_body: Box::new(ExprNode::Var {
+                        var_name: String::from("var_2"),
+                    }),
+                    actual_arg: Box::new(ExprNode::Var {
+                        var_name: String::from("var_3"),
+                    }),
+                }),
+            }),
+        }];
+
+        // Run the parser.
+        let generated_output = parse_recursive_descent(&program_tokens)
+            .expect("parse_recursive_descent returned unexpected parse error");
+
+        // Check parser output matches expected output.
+        assert_eq!(generated_output, expected_output);
+    }
+
+    // Test if we parse lambdas to bind to as much as possible of what follows
+    // them.
+    #[test]
+    fn test_lambda_binding() {
+        // Initialize the test program string and run the lexer on it.
+        let program_str = r"def test = (\a. a \b. b) \c. c;";
+        let program_tokens = run_lexical_analysis(program_str, true);
+
+        // Initialize the expected output.
+        let expected_output = vec![Statement::Def {
+            def_name: String::from("test"),
+            def_body: Box::new(ExprNode::FnApp {
+                fn_body: Box::new(ExprNode::FnDef {
+                    formal_param: String::from("a"),
+                    fn_body: Box::new(ExprNode::FnApp {
+                        fn_body: Box::new(ExprNode::Var {
+                            var_name: String::from("a"),
+                        }),
+                        actual_arg: Box::new(ExprNode::FnDef {
+                            formal_param: String::from("b"),
+                            fn_body: Box::new(ExprNode::Var {
+                                var_name: String::from("b"),
+                            }),
+                        }),
+                    }),
+                }),
+                actual_arg: Box::new(ExprNode::FnDef {
+                    formal_param: String::from("c"),
+                    fn_body: Box::new(ExprNode::Var {
+                        var_name: String::from("c"),
+                    }),
+                }),
+            }),
+        }];
+
+        // Run the parser.
+        let generated_output = parse_recursive_descent(&program_tokens)
+            .expect("parse_recursive_descent returned unexpected parse error");
+
+        // Check parser output matches expected output.
+        assert_eq!(generated_output, expected_output);
+    }
+
+    // Test if we can parse a combination of def and eval statements.
+    #[test]
+    fn test_eval_and_def_statements() {
+        // Initialize the test program string and run the lexer on it.
+        let program_str = r"
+            def zero = \f. \x. x;
+            def succ = \n. \f. \x. f (n f x);
+            eval succ zero;
+        ";
+        let program_tokens = run_lexical_analysis(program_str, true);
+
+        // Initialize the expected output.
+        let expected_output = vec![
+            // def zero = \f. \x. x;
+            Statement::Def {
+                def_name: String::from("zero"),
+                def_body: Box::new(ExprNode::FnDef {
+                    formal_param: String::from("f"),
+                    fn_body: Box::new(ExprNode::FnDef {
+                        formal_param: String::from("x"),
+                        fn_body: Box::new(ExprNode::Var {
+                            var_name: String::from("x"),
+                        }),
+                    }),
+                }),
+            },
+            // def succ = \n. \f. \x. f (n f x);
+            Statement::Def {
+                def_name: String::from("succ"),
+                def_body: Box::new(ExprNode::FnDef {
+                    formal_param: String::from("n"),
+                    fn_body: Box::new(ExprNode::FnDef {
+                        formal_param: String::from("f"),
+                        fn_body: Box::new(ExprNode::FnDef {
+                            formal_param: String::from("x"),
+                            fn_body: Box::new(ExprNode::FnApp {
+                                fn_body: Box::new(ExprNode::Var {
+                                    var_name: String::from("f"),
+                                }),
+                                actual_arg: Box::new(ExprNode::FnApp {
+                                    fn_body: Box::new(ExprNode::FnApp {
+                                        fn_body: Box::new(ExprNode::Var {
+                                            var_name: String::from("n"),
+                                        }),
+                                        actual_arg: Box::new(ExprNode::Var {
+                                            var_name: String::from("f"),
+                                        }),
+                                    }),
+                                    actual_arg: Box::new(ExprNode::Var {
+                                        var_name: String::from("x"),
+                                    }),
+                                }),
+                            }),
+                        }),
+                    }),
+                }),
+            },
+            // eval succ zero;
+            Statement::Eval {
+                eval_body: Box::new(ExprNode::FnApp {
+                    fn_body: Box::new(ExprNode::Var {
+                        var_name: String::from("succ"),
+                    }),
+                    actual_arg: Box::new(ExprNode::Var {
+                        var_name: String::from("zero"),
+                    }),
+                }),
+            },
+        ];
+
+        // Run the parser.
+        let generated_output = parse_recursive_descent(&program_tokens)
+            .expect("parse_recursive_descent returned unexpected parse error");
+
+        // Check parser output matches expected output.
+        assert_eq!(generated_output, expected_output);
+    }
 }

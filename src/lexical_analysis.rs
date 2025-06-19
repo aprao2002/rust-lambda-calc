@@ -170,7 +170,7 @@ fn merge_error_tokens(error_tokens: &Vec<Token>) -> Token {
 
 /// Given a string, returns a vector of tokens that comprise that string.
 /// Discards comments and whitespace if discard_uninteresting is true.
-pub fn make_token_stream(program_str: &str, discard_uninteresting: bool) -> Vec<Token> {
+pub fn run_lexical_analysis(program_str: &str, discard_uninteresting: bool) -> Vec<Token> {
     // Track the current index into program_str we are inspecting, the current
     // line number, and the current vector of output tokens we will return.
     let mut curr_idx: usize = 0;
@@ -288,10 +288,10 @@ mod tests {
             .for_each(|(idx, token)| assert_eq!(token, &tokens_vec[idx]));
     }
 
-    // Test if make_token_stream returns the desired token stream for a
+    // Test if run_lexical_analysis returns the desired token stream for a
     // well-formed program when discard_uninteresting is false.
     #[test]
-    fn test_make_token_stream_no_discarding() {
+    fn test_lexical_analysis_no_discarding() {
         let program_str = r"// This is a comment.
 def identity_fn = (\x.x);";
 
@@ -373,15 +373,15 @@ def identity_fn = (\x.x);";
             },
         ];
 
-        let produced_token_stream = make_token_stream(program_str, false);
+        let produced_token_stream = run_lexical_analysis(program_str, false);
 
         assert_token_stream_has_prefix(&produced_token_stream, &expected_token_stream_prefix);
     }
 
-    // Test if make_token_stream returns the desired token stream for a
+    // Test if run_lexical_analysis returns the desired token stream for a
     // well-formed program when discard_uninteresting is true.
     #[test]
-    fn test_make_token_stream_with_discarding() {
+    fn test_lexical_analysis_with_discarding() {
         let program_str = r"// This is a comment.
 def identity_fn = (\x.x);";
 
@@ -438,15 +438,15 @@ def identity_fn = (\x.x);";
             },
         ];
 
-        let produced_token_stream = make_token_stream(program_str, true);
+        let produced_token_stream = run_lexical_analysis(program_str, true);
 
         assert_token_stream_has_prefix(&produced_token_stream, &expected_token_stream_prefix);
     }
 
-    // Test if make_token_stream returns the desired token stream for a
+    // Test if run_lexical_analysis returns the desired token stream for a
     // program with errors.
     #[test]
-    fn test_make_token_stream_error() {
+    fn test_lexical_analysis_error() {
         let program_str = r"// This is a comment.
 !!!
 def identity_fn = (\x.x);";
@@ -479,7 +479,7 @@ def identity_fn = (\x.x);";
             },
         ];
 
-        let produced_token_stream = make_token_stream(program_str, false);
+        let produced_token_stream = run_lexical_analysis(program_str, false);
 
         assert_token_stream_has_prefix(&produced_token_stream, &expected_token_stream_prefix);
     }
