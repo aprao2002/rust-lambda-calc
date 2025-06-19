@@ -1,6 +1,6 @@
 use std::collections::HashSet;
 
-use crate::recursive_descent_parsing::{ExprNode, Statement};
+use crate::program_representation::{ExprNode, Statement};
 
 fn compute_free_variables(expr_body: &ExprNode) -> HashSet<&str> {
     match expr_body {
@@ -58,21 +58,46 @@ fn find_all_variables(expr_body: &ExprNode) -> HashSet<&str> {
     };
 }
 
+fn rename_variable(old_var_name: &str, new_var_name: &str, expr_to_rename: &mut ExprNode) {
+    match expr_to_rename {
+        ExprNode::Var { var_name } => {
+            if var_name.as_str() == old_var_name {
+                *var_name = String::from(new_var_name);
+            }
+        }
+        ExprNode::FnApp {
+            fn_body,
+            actual_arg,
+        } => {
+            rename_variable(old_var_name, new_var_name, fn_body);
+            rename_variable(old_var_name, new_var_name, actual_arg);
+        }
+        ExprNode::FnDef {
+            formal_param,
+            fn_body,
+        } => {
+            if formal_param.as_str() != old_var_name {
+                rename_variable(old_var_name, new_var_name, fn_body);
+            }
+        }
+    }
+}
+
 fn perform_alpha_conversion(
     formal_param: &str,
-    fn_body: &ExprNode,
+    fn_body: &mut ExprNode,
     value_free_vars: &HashSet<&str>,
 ) {
-    // let all_fn_body_vars = find_all_variables(&*fn_body);
-    // let vars_to_avoid: HashSet<&str> = all_fn_body_vars.union(value_free_vars).copied().collect();
+    let all_fn_body_vars = find_all_variables(fn_body);
+    let vars_to_avoid: HashSet<&str> = all_fn_body_vars.union(value_free_vars).copied().collect();
 
-    // let mut new_formal_parameter = String::from(formal_param);
+    let mut new_formal_param = String::from(formal_param);
 
-    // while vars_to_avoid.contains(new_formal_parameter.as_str()) {
-    //     new_formal_parameter = new_formal_parameter + "'";
-    // }
+    while vars_to_avoid.contains(new_formal_param.as_str()) {
+        new_formal_param = new_formal_param + "'";
+    }
 
-    // rename_variable(formal_param, new_formal_parameter.as_str(), fn_body);
+    rename_variable(formal_param, new_formal_param.as_str(), fn_body);
 }
 
 fn perform_beta_substitution_helper(
@@ -121,7 +146,7 @@ fn perform_beta_substitution_helper(
                 // To prevent variable capture, perform alpha conversion if
                 // var_value contains formal_param as a free variable.
                 if value_free_vars.contains(formal_param.as_str()) {
-                    perform_alpha_conversion(formal_param.as_str(), &*fn_body, value_free_vars);
+                    perform_alpha_conversion(formal_param.as_str(), &mut *fn_body, value_free_vars);
                 }
 
                 // Perform the beta substitution into the function body.
@@ -194,4 +219,10 @@ fn execute_program(statements: Vec<Statement>) {
     // Validate that there are no recursive defs.
 
     // For each statement, if it is an eval, perform the evaluation.
+}
+
+mod tests {
+    use super::*;
+
+    // Test eval_expr_lazy on a few simple programs.
 }
