@@ -144,58 +144,40 @@ fn try_atom_rule(
         .or_else(|_| try_var_expr_rule(tokens, start_idx));
 }
 
-// Tries to parse according to the production `app -> atom e`, and then 'fixes' 
-// the tree to make it left associative if needed.
-fn try_apply_atom_to_expr_rule(
-    tokens: &Vec<Token>,
-    start_idx: usize,
-) -> Result<(Box<ExprNode>, usize), ParseError> {
-    let (outer_fn_body, start_idx) = try_atom_rule(tokens, start_idx)?;
-    let outer_actual_arg_in_parentheses = tokens[start_idx].token_text == "(";
-    let (outer_actual_arg, start_idx) = try_expr_rule(tokens, start_idx)?;
-
-    match (*outer_actual_arg, outer_actual_arg_in_parentheses) {
-        // If the expression the atom is applied to is a function application,
-        // rewire the parse tree to maintain left-associativity.
-        (
-            ExprNode::FnApp {
-                fn_body: inner_fn_body,
-                actual_arg: inner_actual_arg,
-            },
-            false,
-        ) => {
-            return Ok((
-                Box::new(ExprNode::FnApp {
-                    fn_body: Box::new(ExprNode::FnApp {
-                        fn_body: outer_fn_body,
-                        actual_arg: inner_fn_body,
-                    }),
-                    actual_arg: inner_actual_arg,
-                }),
-                start_idx,
-            ));
-        }
-
-        // The actual argument of the atom is not a function application, so no
-        // rewiring is needed.
-        (outer_actual_arg, _) => {
-            return Ok((
-                Box::new(ExprNode::FnApp {
-                    fn_body: outer_fn_body,
-                    actual_arg: Box::new(outer_actual_arg),
-                }),
-                start_idx,
-            ));
-        }
-    }
-}
-
+// Tries to parse shains of function applications. uses the right-associative
+// rule app -> atom e | atom, but parses the sequence of terms using a loop that
+// 'fixes' the output to be left-associative.
 fn try_application_rule(
     tokens: &Vec<Token>,
     start_idx: usize,
 ) -> Result<(Box<ExprNode>, usize), ParseError> {
-    return try_apply_atom_to_expr_rule(tokens, start_idx)
-        .or_else(|_| try_atom_rule(tokens, start_idx));
+    // Try to parse at least one atom.
+    let (mut out_expr, mut start_idx) = try_atom_rule(tokens, start_idx)?;
+
+    // Keep trying to parse atoms while maintaining left associativity.
+    loop {
+        let next_term =
+            try_atom_rule(tokens, start_idx).or_else(|_| try_lambda_rule(tokens, start_idx));
+
+        match next_term {
+            // We were able to parse another term, so add to the output while
+            // ensuring left associativity.
+            Ok((next_atom, new_start_idx)) => {
+                out_expr = Box::new(ExprNode::FnApp {
+                    fn_body: out_expr,
+                    actual_arg: next_atom,
+                });
+                start_idx = new_start_idx;
+            }
+
+            // We were not able to parse another term, so break the loop.
+            Err(_) => {
+                break;
+            }
+        }
+    }
+
+    return Ok((out_expr, start_idx));
 }
 
 // Tries to parse according to the production `e -> lambda | non_lam`.
