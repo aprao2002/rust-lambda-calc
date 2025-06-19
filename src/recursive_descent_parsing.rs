@@ -1,7 +1,7 @@
 use crate::lexical_analysis::{Token, TokenClass};
 
 /// Represents a 'def' or 'eval' statement.
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub enum Statement {
     Def {
         def_name: String,
@@ -13,7 +13,7 @@ pub enum Statement {
 }
 
 /// Represents a lambda-calculus expression.
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub enum ExprNode {
     FnDef {
         formal_param: String,
