@@ -35,11 +35,52 @@ fn expr_node_to_string_helper(expr_node: &ExprNode, string_so_far: &mut String) 
             fn_body,
             actual_arg,
         } => {
-            string_so_far.push('(');
-            expr_node_to_string_helper(fn_body, string_so_far);
+            // If fn_body is a function def, we will surround it with
+            // parentheses for readability.
+            let mut first_needs_parens = false;
+
+            match &**fn_body {
+                ExprNode::FnDef { .. } => {
+                    first_needs_parens = true;
+                }
+                _ => {}
+            }
+
+            // If actual_arg is a function def or function app, we will surround
+            // it with parentheses for readability.
+            let mut second_needs_parens = false;
+
+            match &**actual_arg {
+                ExprNode::FnDef { .. } => {
+                    second_needs_parens = true;
+                }
+                ExprNode::FnApp { .. } => {
+                    second_needs_parens = true;
+                }
+                _ => {}
+            }
+
+            // string_so_far.push('(');
+
+            if first_needs_parens {
+                string_so_far.push('(');
+                expr_node_to_string_helper(fn_body, string_so_far);
+                string_so_far.push(')');
+            } else {
+                expr_node_to_string_helper(fn_body, string_so_far);
+            }
+
             string_so_far.push(' ');
-            expr_node_to_string_helper(actual_arg, string_so_far);
-            string_so_far.push(')');
+
+            if second_needs_parens {
+                string_so_far.push('(');
+                expr_node_to_string_helper(actual_arg, string_so_far);
+                string_so_far.push(')');
+            } else {
+                expr_node_to_string_helper(actual_arg, string_so_far);
+            }
+
+            // string_so_far.push(')');
         }
         ExprNode::FnDef {
             formal_param,
@@ -63,13 +104,13 @@ impl std::fmt::Display for ExprNode {
     }
 }
 
+#[cfg(test)]
 mod tests {
     use super::*;
 
-    // Test if expr_node_to_string works as expected.
     #[test]
-    fn test_expr_node_to_string() {
-        let expected_output = r"\n. \f. \x. (f ((n f) x))";
+    fn test_expr_node_to_string_1() {
+        let expected_output = r"\n. \f. \x. f (n f x)";
 
         let test_input = ExprNode::FnDef {
             formal_param: String::from("n"),

@@ -171,7 +171,8 @@ fn perform_beta_substitution(
     return perform_beta_substitution_helper(expr_body, var_name, &*var_value, &value_free_vars);
 }
 
-fn eval_expr_lazy(expr_body: Box<ExprNode>) -> Box<ExprNode> {
+fn eval_expr_lazy(mut expr_body: Box<ExprNode>) -> Box<ExprNode> {
+    // Keep trying to apply substitution until we are no longer at a redex.
     loop {
         match *expr_body {
             // The expr_body is a function application, so see if it is a redex.
@@ -186,7 +187,7 @@ fn eval_expr_lazy(expr_body: Box<ExprNode>) -> Box<ExprNode> {
                         formal_param,
                         fn_body: defined_fn,
                     } => {
-                        return perform_beta_substitution(
+                        expr_body = perform_beta_substitution(
                             defined_fn,
                             formal_param.as_str(),
                             actual_arg,
@@ -194,18 +195,15 @@ fn eval_expr_lazy(expr_body: Box<ExprNode>) -> Box<ExprNode> {
                     }
 
                     // The function being applied is not a function definition,
-                    // so we are not at a redex.
-                    fn_body => {
-                        return Box::new(ExprNode::FnApp {
-                            fn_body: Box::new(fn_body),
-                            actual_arg: actual_arg,
-                        });
+                    // so we are not at a redex, so we can break and return.
+                    expr_body => {
+                        return Box::new(expr_body);
                     }
                 }
             }
 
             // The expr_body is not a function application, so it is not a
-            // redex.
+            // redex. Because of this, we can break.
             expr_body => {
                 return Box::new(expr_body);
             }
@@ -221,8 +219,40 @@ fn execute_program(statements: Vec<Statement>) {
     // For each statement, if it is an eval, perform the evaluation.
 }
 
+#[cfg(test)]
 mod tests {
+    use crate::{
+        lexical_analysis::run_lexical_analysis, recursive_descent_parsing::parse_recursive_descent,
+    };
+
     use super::*;
 
     // Test eval_expr_lazy on a few simple programs.
+    #[test]
+    fn test_eval_expr_lazy() {
+        let program_strs_and_expected_outputs = vec![
+            (r"eval (\x. x y) (\z. z);", r"y"),
+            (
+                r"eval (\a. \b. a b) ( (\x. x) (\y. y) );",
+                r"\b. (\x. x) (\y. y) b",
+            ),
+        ];
+
+        for (program_str, expected_output) in program_strs_and_expected_outputs {
+            let program_tokens = run_lexical_analysis(program_str, true);
+            let program_statements = parse_recursive_descent(&program_tokens);
+
+            if let Statement::Eval {
+                eval_body: test_expr_node,
+            } = &program_statements.expect("Parsing failed.")[0]
+            {
+                assert_eq!(
+                    expected_output,
+                    format!("{}", *eval_expr_lazy(test_expr_node.clone())).as_str()
+                );
+            } else {
+                panic!("Expected eval statement in parser output but found something else.");
+            }
+        }
+    }
 }
