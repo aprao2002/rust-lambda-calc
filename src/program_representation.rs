@@ -1,9 +1,6 @@
 /// Data structures to represent lambda calculus expressions, and some utility
 /// functions to display and manipulate them.
-use std::{
-    collections::{HashMap, HashSet},
-    os::macos::raw::stat,
-};
+use std::collections::{HashMap, HashSet};
 
 /// Represents a 'def' or 'eval' statement.
 #[derive(Debug, PartialEq, Eq, Clone)]
@@ -111,6 +108,19 @@ pub fn expr_node_to_string(expr_node: &ExprNode) -> String {
 impl std::fmt::Display for ExprNode {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         return write!(f, "{}", expr_node_to_string(self).as_str());
+    }
+}
+
+impl std::fmt::Display for Statement {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Statement::Def { def_name, def_body } => {
+                return write!(f, "def {} = {};", def_name, def_body);
+            }
+            Statement::Eval { eval_body } => {
+                return write!(f, "eval {};", eval_body);
+            }
+        }
     }
 }
 
