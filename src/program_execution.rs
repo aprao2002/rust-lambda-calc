@@ -5,11 +5,19 @@ use crate::program_representation::{
 };
 use crate::program_representation::{ExprNode, Statement};
 
+// Given an ExprNode, a formal param to rename, and the free variables of a
+// value being substituted into the ExprNode, rename the formal_param so that
+// we don't accidentally introduce new references to the formal_param.
 fn perform_alpha_conversion(
     formal_param: &str,
     fn_body: &mut ExprNode,
     value_free_vars: &HashSet<&str>,
 ) {
+    assert!(
+        value_free_vars.contains(formal_param),
+        "Alpha conversion attempted when not required."
+    );
+
     let all_fn_body_vars = get_all_variables(fn_body);
     let vars_to_avoid: HashSet<&str> = all_fn_body_vars.union(value_free_vars).copied().collect();
 
@@ -22,7 +30,10 @@ fn perform_alpha_conversion(
     rename_variable(formal_param, new_formal_param.as_str(), fn_body);
 }
 
-fn perform_beta_substitution_helper(
+// Performs beta reduction on expr_body, substituting instances of var_name
+// with var_value. Performs alpha conversion while doing substitutions if
+// needed.
+fn perform_beta_reduction_helper(
     expr_body: &ExprNode,
     var_name: &str,
     var_value: &ExprNode,
@@ -47,13 +58,9 @@ fn perform_beta_substitution_helper(
             actual_arg,
         } => {
             let subbed_fn_body =
-                perform_beta_substitution_helper(&**fn_body, var_name, var_value, value_free_vars);
-            let subbed_actual_arg = perform_beta_substitution_helper(
-                &*actual_arg,
-                var_name,
-                var_value,
-                value_free_vars,
-            );
+                perform_beta_reduction_helper(&**fn_body, var_name, var_value, value_free_vars);
+            let subbed_actual_arg =
+                perform_beta_reduction_helper(&*actual_arg, var_name, var_value, value_free_vars);
 
             return Box::new(ExprNode::FnApp {
                 fn_body: subbed_fn_body,
@@ -82,7 +89,7 @@ fn perform_beta_substitution_helper(
 
                     return Box::new(ExprNode::FnDef {
                         formal_param: formal_param.clone(),
-                        fn_body: perform_beta_substitution_helper(
+                        fn_body: perform_beta_reduction_helper(
                             &*final_fn_body,
                             var_name,
                             var_value,
@@ -90,13 +97,13 @@ fn perform_beta_substitution_helper(
                         ),
                     });
                 }
-                // Directly perform beta substitution if var_value does not
+                // Directly perform beta reduction if var_value does not
                 // contain formal_param as a free variable.
                 else {
-                    // Perform the beta substitution into the function body.
+                    // Perform the beta reduction into the function body.
                     return Box::new(ExprNode::FnDef {
                         formal_param: formal_param.clone(),
-                        fn_body: perform_beta_substitution_helper(
+                        fn_body: perform_beta_reduction_helper(
                             &*fn_body,
                             var_name,
                             var_value,
@@ -116,13 +123,15 @@ fn perform_beta_substitution_helper(
     };
 }
 
-fn perform_beta_substitution(
+// Performs beta reduction on expr_body, replacing instances of var_name
+// with var_value.
+fn perform_beta_reduction(
     expr_body: &ExprNode,
     var_name: &str,
     var_value: &ExprNode,
 ) -> Box<ExprNode> {
     let value_free_vars = get_all_free_variables(var_value);
-    return perform_beta_substitution_helper(expr_body, var_name, var_value, &value_free_vars);
+    return perform_beta_reduction_helper(expr_body, var_name, var_value, &value_free_vars);
 }
 
 // Performs lazy / normal order evaluation of a given lambda calculus
@@ -158,7 +167,7 @@ fn eval_expr_lazy(
                         parsed_left = false;
                         // println!("In inner FnDef case.");
 
-                        expr_body = perform_beta_substitution(
+                        expr_body = perform_beta_reduction(
                             &*defined_fn,
                             formal_param.as_str(),
                             &*actual_arg,
@@ -170,12 +179,6 @@ fn eval_expr_lazy(
                     // expand it if it is actually a def statement macro.
                     ExprNode::Var { var_name } => {
                         parsed_left = false;
-                        // println!("In inner Var case.");
-
-                        // println!(
-                        //     "Var name is {var_name}. In dev map = {}",
-                        //     def_statement_map.contains_key(var_name.as_str())
-                        // );
 
                         // The variable is a def statement macro.
                         if def_statement_map.contains_key(var_name.as_str()) {
@@ -199,16 +202,12 @@ fn eval_expr_lazy(
                                 fn_body: Box::new(ExprNode::Var { var_name }),
                                 actual_arg: actual_arg,
                             });
-
-                            // return Box::new(ExprNode::Var { var_name });
                         }
                     }
 
                     // The inner function is a function application, so evaluate
                     // the inner function.
                     fn_body_val => {
-                        // println!("In inner FnApp case, parsed_left = {parsed_left}.");
-
                         if !parsed_left {
                             if verbose {
                                 println!("Recursing on {fn_body_val}.")
@@ -275,6 +274,8 @@ mod tests {
 
     use super::*;
 
+    // Executes program_str and verifies that the outputs matches
+    // expected_str_outputs.
     fn run_execution_test(program_str: &str, expected_str_outputs: &Vec<&str>) {
         let program_tokens = run_lexical_analysis(program_str, true);
         let program =
@@ -332,7 +333,7 @@ mod tests {
         run_execution_test(addition_program_str, &addition_expected_output);
     }
 
-    // Test eval_expr_lazy on summing up counting the length of a  linked list.
+    // Test eval_expr_lazy on counting the length of a linked list.
     #[test]
     fn test_eval_expr_linked_list_length() {
         let linked_list_length_program_str = r"
