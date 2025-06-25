@@ -1,6 +1,7 @@
 /// Data structures to represent lambda calculus expressions, and some utility
 /// functions to display and manipulate them.
 use std::collections::{HashMap, HashSet};
+use std::ops::{Index, IndexMut};
 
 /// Represents a lambda-calculus expression.
 #[derive(Debug, PartialEq, Eq, Clone)]
@@ -30,10 +31,91 @@ pub enum Statement {
     },
 }
 
+/// Arena allocator for ExprNodes.
+pub struct ExprNodeArena {
+    next_idx: usize,
+    max_num_nodes: Option<usize>,
+    data: Vec<ExprNode>,
+}
+
+impl ExprNodeArena {
+    pub fn new(max_num_nodes: Option<usize>) -> Self {
+        ExprNodeArena {
+            next_idx: 0,
+            max_num_nodes: max_num_nodes,
+            data: Vec::new(),
+        }
+    }
+
+    pub fn from_vec(expr_node_vec: Vec<ExprNode>, max_num_nodes: Option<usize>) -> Self {
+        ExprNodeArena {
+            next_idx: expr_node_vec.len(),
+            max_num_nodes: max_num_nodes,
+            data: expr_node_vec,
+        }
+    }
+
+    pub fn push(&mut self, expr_node: ExprNode) {
+        if self.next_idx < self.data.len() {
+            self.data[self.next_idx] = expr_node;
+        } else {
+            if let Some(max_num_nodes) = self.max_num_nodes {
+                assert!(
+                    self.next_idx < max_num_nodes,
+                    "ExprNodeArena ran out of space."
+                );
+            }
+
+            self.data.push(expr_node);
+            self.next_idx += 1;
+        }
+    }
+
+    pub fn len(&self) -> usize {
+        self.data.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.data.is_empty()
+    }
+
+    pub fn get_next_idx(&self) -> usize {
+        return self.next_idx;
+    }
+
+    pub fn set_next_idx(&mut self, new_next_idx: usize) {
+        self.next_idx = new_next_idx;
+    }
+}
+
+impl Index<usize> for ExprNodeArena {
+    type Output = ExprNode;
+
+    fn index(&self, idx: usize) -> &Self::Output {
+        assert!(
+            idx < self.next_idx,
+            "Tried to index beyond end of ExprNodeArena."
+        );
+
+        return &self.data[idx];
+    }
+}
+
+impl IndexMut<usize> for ExprNodeArena {
+    fn index_mut(&mut self, idx: usize) -> &mut Self::Output {
+        assert!(
+            idx < self.next_idx,
+            "Tried to index beyond end of ExprNodeArena."
+        );
+
+        return &mut self.data[idx];
+    }
+}
+
 /// Represents a lambda calculus program.
 pub struct Program {
-    expr_nodes: Vec<ExprNode>,
-    statements: Vec<Statement>,
+    pub expr_nodes: ExprNodeArena,
+    pub statements: Vec<Statement>,
 }
 
 // Helper function to produce a string representation of an ExprNode.
@@ -320,7 +402,7 @@ mod tests {
         ];
 
         let test_program = Program {
-            expr_nodes: test_expr_nodes,
+            expr_nodes: ExprNodeArena::from_vec(test_expr_nodes, None),
             statements: vec![],
         };
 
