@@ -1,5 +1,5 @@
+use crate::box_tree_impl::box_tree_ast::{ExprNode, Statement};
 use crate::lexical_analysis::{Token, TokenClass};
-use crate::program_representation::{ExprNode, Statement};
 
 /// Represents a parsing error.
 #[derive(Debug, PartialEq, Eq)]
@@ -117,7 +117,7 @@ fn try_atom_rule(
         .or_else(|_| try_var_expr_rule(tokens, start_idx));
 }
 
-// Tries to parse shains of function applications. uses the right-associative
+// Tries to parse chains of function applications. uses the right-associative
 // rule app -> atom e | atom, but parses the sequence of terms using a loop that
 // 'fixes' the output to be left-associative.
 fn try_application_rule(

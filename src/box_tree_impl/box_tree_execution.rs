@@ -1,9 +1,8 @@
 use std::collections::{HashMap, HashSet};
 
-use crate::program_representation::{
-    get_all_free_variables, get_all_variables, make_def_map, rename_variable,
+use crate::box_tree_impl::box_tree_ast::{
+    get_all_free_variables, get_all_variables, make_def_map, rename_variable, ExprNode, Statement,
 };
-use crate::program_representation::{ExprNode, Statement};
 
 // Given an ExprNode, a formal param to rename, and the free variables of a
 // value being substituted into the ExprNode, rename the formal_param so that
@@ -269,7 +268,8 @@ mod tests {
     use std::iter::zip;
 
     use crate::{
-        lexical_analysis::run_lexical_analysis, recursive_descent_parsing::parse_recursive_descent,
+        box_tree_impl::box_tree_recursive_descent_parsing::parse_recursive_descent,
+        lexical_analysis::run_lexical_analysis,
     };
 
     use super::*;

@@ -1,4 +1,4 @@
-mod lexical_analysis;
-mod program_representation;
-mod recursive_descent_parsing;
-mod program_execution;
+pub mod lexical_analysis;
+
+pub mod box_tree_impl;
+pub mod node_vector_impl;
