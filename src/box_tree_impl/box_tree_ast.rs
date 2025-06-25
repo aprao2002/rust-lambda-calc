@@ -191,21 +191,18 @@ pub fn get_all_variables(expr_body: &ExprNode) -> HashSet<&str> {
             fn_body,
             actual_arg,
         } => {
-            let fn_body_free_vars = get_all_free_variables(&**fn_body);
-            let actual_arg_free_vars = get_all_free_variables(&**actual_arg);
+            let fn_body_vars = get_all_variables(&**fn_body);
+            let actual_arg_vars = get_all_variables(&**actual_arg);
 
-            return fn_body_free_vars
-                .union(&actual_arg_free_vars)
-                .copied()
-                .collect();
+            return fn_body_vars.union(&actual_arg_vars).copied().collect();
         }
         ExprNode::FnDef {
             formal_param,
             fn_body,
         } => {
-            let mut fn_body_free_vars = get_all_free_variables(&*fn_body);
-            fn_body_free_vars.insert(formal_param.as_str());
-            return fn_body_free_vars;
+            let mut fn_body_vars = get_all_variables(&*fn_body);
+            fn_body_vars.insert(formal_param.as_str());
+            return fn_body_vars;
         }
     };
 }
