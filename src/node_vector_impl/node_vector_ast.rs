@@ -32,6 +32,7 @@ pub enum Statement {
 }
 
 /// Arena allocator for ExprNodes.
+#[derive(PartialEq, Debug)]
 pub struct ExprNodeArena {
     next_idx: usize,
     max_num_nodes: Option<usize>,
@@ -113,6 +114,7 @@ impl IndexMut<usize> for ExprNodeArena {
 }
 
 /// Represents a lambda calculus program.
+#[derive(PartialEq, Debug)]
 pub struct Program {
     pub expr_nodes: ExprNodeArena,
     pub statements: Vec<Statement>,
