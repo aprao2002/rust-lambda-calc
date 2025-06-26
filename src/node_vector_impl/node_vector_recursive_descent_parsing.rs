@@ -293,6 +293,7 @@ mod tests {
         let program_str = r"def identity = \x. x;";
         let program_tokens = run_lexical_analysis(program_str, true);
 
+        // Initialize the expected output.
         let expected_expr_nodes = vec![
             ExprNode::FnDef {
                 formal_param: String::from("x"),
@@ -319,221 +320,321 @@ mod tests {
         assert_eq!(generated_output, expected_program);
     }
 
-    // // Test if we can parse a simple eval statement.
-    // #[test]
-    // fn test_single_simple_eval_statement() {
-    //     // Initialize the test program string and run the lexer on it.
-    //     let program_str = r"eval (\x. x)(\y. y);";
-    //     let program_tokens = run_lexical_analysis(program_str, true);
+    // Test if we can parse a simple eval statement.
+    #[test]
+    fn test_single_simple_eval_statement() {
+        // Initialize the test program string and run the lexer on it.
+        let program_str = r"eval (\x. x)(\y. y);";
+        let program_tokens = run_lexical_analysis(program_str, true);
 
-    //     // Initialize the expected output.
-    //     let expected_output = vec![Statement::Eval {
-    //         eval_body: Box::new(ExprNode::FnApp {
-    //             fn_body: Box::new(ExprNode::FnDef {
-    //                 formal_param: String::from("x"),
-    //                 fn_body: Box::new(ExprNode::Var {
-    //                     var_name: String::from("x"),
-    //                 }),
-    //             }),
-    //             actual_arg: Box::new(ExprNode::FnDef {
-    //                 formal_param: String::from("y"),
-    //                 fn_body: Box::new(ExprNode::Var {
-    //                     var_name: String::from("y"),
-    //                 }),
-    //             }),
-    //         }),
-    //     }];
+        // Initialize the expected output.
+        let expected_expr_nodes = vec![
+            // 0: (\x. x)(\y. y)
+            ExprNode::FnApp {
+                fn_body_idx: 1,
+                actual_arg_idx: 3,
+            },
+            // 1: \x. x
+            ExprNode::FnDef {
+                formal_param: String::from("x"),
+                fn_body_idx: 2,
+            },
+            // 2: x
+            ExprNode::Var {
+                var_name: String::from("x"),
+            },
+            // 3: \y. y
+            ExprNode::FnDef {
+                formal_param: String::from("y"),
+                fn_body_idx: 4,
+            },
+            // 4: y
+            ExprNode::Var {
+                var_name: String::from("y"),
+            },
+        ];
 
-    //     // Run the parser.
-    //     let generated_output = parse_recursive_descent(&program_tokens)
-    //         .expect("parse_recursive_descent returned unexpected parse error");
+        let expected_program = Program {
+            expr_nodes: ExprNodeArena::from_vec(expected_expr_nodes, None),
+            statements: vec![Statement::Eval { eval_body_idx: 0 }],
+        };
 
-    //     // Check parser output matches expected output.
-    //     assert_eq!(generated_output, expected_output);
-    // }
+        // Run the parser.
+        let generated_output = parse_recursive_descent(&program_tokens)
+            .expect("parse_recursive_descent returned unexpected parse error");
 
-    // // Test if we parse function application as left associative.
-    // #[test]
-    // fn test_function_application_association() {
-    //     // Initialize the test program string and run the lexer on it.
-    //     let program_str = r"eval var_1 var_2 var_3;";
-    //     let program_tokens = run_lexical_analysis(program_str, true);
+        // Check parser output matches expected output.
+        assert_eq!(generated_output, expected_program);
+    }
 
-    //     // Initialize the expected output.
-    //     let expected_output = vec![Statement::Eval {
-    //         eval_body: Box::new(ExprNode::FnApp {
-    //             fn_body: Box::new(ExprNode::FnApp {
-    //                 fn_body: Box::new(ExprNode::Var {
-    //                     var_name: String::from("var_1"),
-    //                 }),
-    //                 actual_arg: Box::new(ExprNode::Var {
-    //                     var_name: String::from("var_2"),
-    //                 }),
-    //             }),
-    //             actual_arg: Box::new(ExprNode::Var {
-    //                 var_name: String::from("var_3"),
-    //             }),
-    //         }),
-    //     }];
+    // Test if we parse function application as left associative.
+    #[test]
+    fn test_function_application_association() {
+        // Initialize the test program string and run the lexer on it.
+        let program_str = r"eval var_1 var_2 var_3;";
+        let program_tokens = run_lexical_analysis(program_str, true);
 
-    //     // Run the parser.
-    //     let generated_output = parse_recursive_descent(&program_tokens)
-    //         .expect("parse_recursive_descent returned unexpected parse error");
+        // Initialize the expected output.
+        let expected_expr_nodes = vec![
+            // 0: var_1 var_2 var_3
+            ExprNode::FnApp {
+                fn_body_idx: 1,
+                actual_arg_idx: 4,
+            },
+            // 1: var_1 var_2
+            ExprNode::FnApp {
+                fn_body_idx: 2,
+                actual_arg_idx: 3,
+            },
+            // 2: var_1
+            ExprNode::Var {
+                var_name: String::from("var_1"),
+            },
+            // 3: var_2
+            ExprNode::Var {
+                var_name: String::from("var_2"),
+            },
+            // 4: var_3
+            ExprNode::Var {
+                var_name: String::from("var_3"),
+            },
+        ];
 
-    //     // Check parser output matches expected output.
-    //     assert_eq!(generated_output, expected_output);
-    // }
+        let expected_program = Program {
+            expr_nodes: ExprNodeArena::from_vec(expected_expr_nodes, None),
+            statements: vec![Statement::Eval { eval_body_idx: 0 }],
+        };
 
-    // // Test if we function application association respects parentheses.
-    // #[test]
-    // fn test_function_application_association_with_parentheses() {
-    //     // Initialize the test program string and run the lexer on it.
-    //     let program_str = r"eval var_1 (var_2 var_3);";
-    //     let program_tokens = run_lexical_analysis(program_str, true);
+        // Run the parser.
+        let generated_output = parse_recursive_descent(&program_tokens)
+            .expect("parse_recursive_descent returned unexpected parse error");
 
-    //     // Initialize the expected output.
-    //     let expected_output = vec![Statement::Eval {
-    //         eval_body: Box::new(ExprNode::FnApp {
-    //             fn_body: Box::new(ExprNode::Var {
-    //                 var_name: String::from("var_1"),
-    //             }),
-    //             actual_arg: Box::new(ExprNode::FnApp {
-    //                 fn_body: Box::new(ExprNode::Var {
-    //                     var_name: String::from("var_2"),
-    //                 }),
-    //                 actual_arg: Box::new(ExprNode::Var {
-    //                     var_name: String::from("var_3"),
-    //                 }),
-    //             }),
-    //         }),
-    //     }];
+        // Check parser output matches expected output.
+        assert_eq!(generated_output, expected_program);
+    }
 
-    //     // Run the parser.
-    //     let generated_output = parse_recursive_descent(&program_tokens)
-    //         .expect("parse_recursive_descent returned unexpected parse error");
+    // Test if we function application association respects parentheses.
+    #[test]
+    fn test_function_application_association_with_parentheses() {
+        // Initialize the test program string and run the lexer on it.
+        let program_str = r"eval var_1 (var_2 var_3);";
+        let program_tokens = run_lexical_analysis(program_str, true);
 
-    //     // Check parser output matches expected output.
-    //     assert_eq!(generated_output, expected_output);
-    // }
+        // Initialize the expected output.
+        let expected_expr_nodes = vec![
+            // 0: var_1 (var_2 var_3)
+            ExprNode::FnApp {
+                fn_body_idx: 1,
+                actual_arg_idx: 2,
+            },
+            // 1: var_1
+            ExprNode::Var {
+                var_name: String::from("var_1"),
+            },
+            // 2: var_2 var_3
+            ExprNode::FnApp {
+                fn_body_idx: 3,
+                actual_arg_idx: 4,
+            },
+            // 3: var_2
+            ExprNode::Var {
+                var_name: String::from("var_2"),
+            },
+            // 4: var_3
+            ExprNode::Var {
+                var_name: String::from("var_3"),
+            },
+        ];
 
-    // // Test if we parse lambdas to bind to as much as possible of what follows
-    // // them.
-    // #[test]
-    // fn test_lambda_binding() {
-    //     // Initialize the test program string and run the lexer on it.
-    //     let program_str = r"def test = (\a. a \b. b) \c. c;";
-    //     let program_tokens = run_lexical_analysis(program_str, true);
+        let expected_program = Program {
+            expr_nodes: ExprNodeArena::from_vec(expected_expr_nodes, None),
+            statements: vec![Statement::Eval { eval_body_idx: 0 }],
+        };
 
-    //     // Initialize the expected output.
-    //     let expected_output = vec![Statement::Def {
-    //         def_name: String::from("test"),
-    //         def_body: Box::new(ExprNode::FnApp {
-    //             fn_body: Box::new(ExprNode::FnDef {
-    //                 formal_param: String::from("a"),
-    //                 fn_body: Box::new(ExprNode::FnApp {
-    //                     fn_body: Box::new(ExprNode::Var {
-    //                         var_name: String::from("a"),
-    //                     }),
-    //                     actual_arg: Box::new(ExprNode::FnDef {
-    //                         formal_param: String::from("b"),
-    //                         fn_body: Box::new(ExprNode::Var {
-    //                             var_name: String::from("b"),
-    //                         }),
-    //                     }),
-    //                 }),
-    //             }),
-    //             actual_arg: Box::new(ExprNode::FnDef {
-    //                 formal_param: String::from("c"),
-    //                 fn_body: Box::new(ExprNode::Var {
-    //                     var_name: String::from("c"),
-    //                 }),
-    //             }),
-    //         }),
-    //     }];
+        // Run the parser.
+        let generated_output = parse_recursive_descent(&program_tokens)
+            .expect("parse_recursive_descent returned unexpected parse error");
 
-    //     // Run the parser.
-    //     let generated_output = parse_recursive_descent(&program_tokens)
-    //         .expect("parse_recursive_descent returned unexpected parse error");
+        // Check parser output matches expected output.
+        assert_eq!(generated_output, expected_program);
+    }
 
-    //     // Check parser output matches expected output.
-    //     assert_eq!(generated_output, expected_output);
-    // }
+    // Test if we parse lambdas to bind to as much as possible of what follows
+    // them.
+    #[test]
+    fn test_lambda_binding() {
+        // Initialize the test program string and run the lexer on it.
+        let program_str = r"def test = (\a. a \b. b) \c. c;";
+        let program_tokens = run_lexical_analysis(program_str, true);
 
-    // // Test if we can parse a combination of def and eval statements.
-    // #[test]
-    // fn test_eval_and_def_statements() {
-    //     // Initialize the test program string and run the lexer on it.
-    //     let program_str = r"
-    //         def zero = \f. \x. x;
-    //         def succ = \n. \f. \x. f (n f x);
-    //         eval succ zero;
-    //     ";
-    //     let program_tokens = run_lexical_analysis(program_str, true);
+        // Initialize the expected output.
+        let expected_expr_nodes = vec![
+            // 0: (\a. a \b. b) \c. c
+            ExprNode::FnApp {
+                fn_body_idx: 1,
+                actual_arg_idx: 6,
+            },
+            // 1: \a. a \b. b
+            ExprNode::FnDef {
+                formal_param: String::from("a"),
+                fn_body_idx: 2,
+            },
+            // 2: a \b. b
+            ExprNode::FnApp {
+                fn_body_idx: 3,
+                actual_arg_idx: 4,
+            },
+            // 3: a
+            ExprNode::Var {
+                var_name: String::from("a"),
+            },
+            // 4: \b. b
+            ExprNode::FnDef {
+                formal_param: String::from("b"),
+                fn_body_idx: 5,
+            },
+            // 5: b
+            ExprNode::Var {
+                var_name: String::from("b"),
+            },
+            // 6: \c. c
+            ExprNode::FnDef {
+                formal_param: String::from("c"),
+                fn_body_idx: 7,
+            },
+            // 7: c
+            ExprNode::Var {
+                var_name: String::from("c"),
+            },
+        ];
 
-    //     // Initialize the expected output.
-    //     let expected_output = vec![
-    //         // def zero = \f. \x. x;
-    //         Statement::Def {
-    //             def_name: String::from("zero"),
-    //             def_body: Box::new(ExprNode::FnDef {
-    //                 formal_param: String::from("f"),
-    //                 fn_body: Box::new(ExprNode::FnDef {
-    //                     formal_param: String::from("x"),
-    //                     fn_body: Box::new(ExprNode::Var {
-    //                         var_name: String::from("x"),
-    //                     }),
-    //                 }),
-    //             }),
-    //         },
-    //         // def succ = \n. \f. \x. f (n f x);
-    //         Statement::Def {
-    //             def_name: String::from("succ"),
-    //             def_body: Box::new(ExprNode::FnDef {
-    //                 formal_param: String::from("n"),
-    //                 fn_body: Box::new(ExprNode::FnDef {
-    //                     formal_param: String::from("f"),
-    //                     fn_body: Box::new(ExprNode::FnDef {
-    //                         formal_param: String::from("x"),
-    //                         fn_body: Box::new(ExprNode::FnApp {
-    //                             fn_body: Box::new(ExprNode::Var {
-    //                                 var_name: String::from("f"),
-    //                             }),
-    //                             actual_arg: Box::new(ExprNode::FnApp {
-    //                                 fn_body: Box::new(ExprNode::FnApp {
-    //                                     fn_body: Box::new(ExprNode::Var {
-    //                                         var_name: String::from("n"),
-    //                                     }),
-    //                                     actual_arg: Box::new(ExprNode::Var {
-    //                                         var_name: String::from("f"),
-    //                                     }),
-    //                                 }),
-    //                                 actual_arg: Box::new(ExprNode::Var {
-    //                                     var_name: String::from("x"),
-    //                                 }),
-    //                             }),
-    //                         }),
-    //                     }),
-    //                 }),
-    //             }),
-    //         },
-    //         // eval succ zero;
-    //         Statement::Eval {
-    //             eval_body: Box::new(ExprNode::FnApp {
-    //                 fn_body: Box::new(ExprNode::Var {
-    //                     var_name: String::from("succ"),
-    //                 }),
-    //                 actual_arg: Box::new(ExprNode::Var {
-    //                     var_name: String::from("zero"),
-    //                 }),
-    //             }),
-    //         },
-    //     ];
+        let expected_program = Program {
+            expr_nodes: ExprNodeArena::from_vec(expected_expr_nodes, None),
+            statements: vec![Statement::Def {
+                def_name: String::from("test"),
+                def_body_idx: 0,
+            }],
+        };
 
-    //     // Run the parser.
-    //     let generated_output = parse_recursive_descent(&program_tokens)
-    //         .expect("parse_recursive_descent returned unexpected parse error");
+        // Run the parser.
+        let generated_output = parse_recursive_descent(&program_tokens)
+            .expect("parse_recursive_descent returned unexpected parse error");
 
-    //     // Check parser output matches expected output.
-    //     assert_eq!(generated_output, expected_output);
-    // }
+        // Check parser output matches expected output.
+        assert_eq!(generated_output, expected_program);
+    }
+
+    // Test if we can parse a combination of def and eval statements.
+    #[test]
+    fn test_eval_and_def_statements() {
+        // Initialize the test program string and run the lexer on it.
+        let program_str = r"
+            def zero = \f. \x. x;
+            def succ = \n. \f. \x. f (n f x);
+            eval succ zero;
+        ";
+        let program_tokens = run_lexical_analysis(program_str, true);
+
+        // Initialize the expected output.
+        let expected_expr_nodes = vec![
+            // ---- def zero = \f. \x. x; ----
+            // 0: \f. \x. x
+            ExprNode::FnDef {
+                formal_param: String::from("f"),
+                fn_body_idx: 1,
+            },
+            // 1: \x. x
+            ExprNode::FnDef {
+                formal_param: String::from("x"),
+                fn_body_idx: 2,
+            },
+            // 2: x
+            ExprNode::Var {
+                var_name: String::from("x"),
+            },
+            // ---- def succ = \n. \f. \x. f (n f x); ----
+            // 3: \n. \f. \x. f (n f x)
+            ExprNode::FnDef {
+                formal_param: String::from("n"),
+                fn_body_idx: 4,
+            },
+            // 4: \f. \x. f (n f x)
+            ExprNode::FnDef {
+                formal_param: String::from("f"),
+                fn_body_idx: 5,
+            },
+            // 5: \x. f (n f x)
+            ExprNode::FnDef {
+                formal_param: String::from("x"),
+                fn_body_idx: 6,
+            },
+            // 6: f (n f x)
+            ExprNode::FnApp {
+                fn_body_idx: 7,
+                actual_arg_idx: 8,
+            },
+            // 7: f
+            ExprNode::Var {
+                var_name: String::from("f"),
+            },
+            // 8: n f x
+            ExprNode::FnApp {
+                fn_body_idx: 9,
+                actual_arg_idx: 12,
+            },
+            // 9: n f
+            ExprNode::FnApp {
+                fn_body_idx: 10,
+                actual_arg_idx: 11,
+            },
+            // 10: n
+            ExprNode::Var {
+                var_name: String::from("n"),
+            },
+            // 11: f
+            ExprNode::Var {
+                var_name: String::from("f"),
+            },
+            // 12: x
+            ExprNode::Var {
+                var_name: String::from("x"),
+            },
+            // ---- eval succ zero; ----
+            // 13: succ zero
+            ExprNode::FnApp {
+                fn_body_idx: 14,
+                actual_arg_idx: 15,
+            },
+            // 14: succ
+            ExprNode::Var {
+                var_name: String::from("succ"),
+            },
+            // 15: zero
+            ExprNode::Var {
+                var_name: String::from("zero"),
+            },
+        ];
+
+        let expected_program = Program {
+            expr_nodes: ExprNodeArena::from_vec(expected_expr_nodes, None),
+            statements: vec![
+                Statement::Def {
+                    def_name: String::from("zero"),
+                    def_body_idx: 0,
+                },
+                Statement::Def {
+                    def_name: String::from("succ"),
+                    def_body_idx: 3,
+                },
+                Statement::Eval { eval_body_idx: 13 },
+            ],
+        };
+
+        // Run the parser.
+        let generated_output = parse_recursive_descent(&program_tokens)
+            .expect("parse_recursive_descent returned unexpected parse error");
+
+        // Check parser output matches expected output.
+        assert_eq!(generated_output, expected_program);
+    }
 }
