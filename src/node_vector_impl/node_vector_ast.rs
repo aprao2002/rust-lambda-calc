@@ -114,10 +114,128 @@ impl IndexMut<usize> for ExprNodeArena {
 }
 
 /// Represents a lambda calculus program.
-#[derive(PartialEq, Debug)]
+#[derive(Debug)]
 pub struct Program {
     pub expr_nodes: ExprNodeArena,
     pub statements: Vec<Statement>,
+}
+
+fn expr_nodes_are_equal(
+    idx_1: usize,
+    idx_2: usize,
+    program_1: &Program,
+    program_2: &Program,
+) -> bool {
+    match (&program_1.expr_nodes[idx_1], &program_2.expr_nodes[idx_2]) {
+        // Both are FnApps.
+        (
+            ExprNode::FnApp {
+                fn_body_idx: fn_body_idx_1,
+                actual_arg_idx: actual_arg_idx_1,
+            },
+            ExprNode::FnApp {
+                fn_body_idx: fn_body_idx_2,
+                actual_arg_idx: actual_arg_idx_2,
+            },
+        ) => {
+            return expr_nodes_are_equal(*fn_body_idx_1, *fn_body_idx_2, program_1, program_2)
+                && expr_nodes_are_equal(
+                    *actual_arg_idx_1,
+                    *actual_arg_idx_2,
+                    program_1,
+                    program_2,
+                );
+        }
+
+        // Both are FnDefs.
+        (
+            ExprNode::FnDef {
+                formal_param: formal_param_1,
+                fn_body_idx: fn_body_idx_1,
+            },
+            ExprNode::FnDef {
+                formal_param: formal_param_2,
+                fn_body_idx: fn_body_idx_2,
+            },
+        ) => {
+            return (formal_param_1 == formal_param_2)
+                && expr_nodes_are_equal(*fn_body_idx_1, *fn_body_idx_2, program_1, program_2);
+        }
+
+        // Both are Vars.
+        (
+            ExprNode::Var {
+                var_name: var_name_1,
+            },
+            ExprNode::Var {
+                var_name: var_name_2,
+            },
+        ) => {
+            return var_name_1 == var_name_2;
+        }
+
+        // Enum variant mismatch.
+        _ => {
+            return false;
+        }
+    }
+}
+
+impl PartialEq for Program {
+    fn eq(&self, other: &Self) -> bool {
+        if (self.statements.len() != other.statements.len())
+            || (self.expr_nodes.len() != other.expr_nodes.len())
+            || (self.expr_nodes.next_idx != other.expr_nodes.next_idx)
+        {
+            return false;
+        }
+
+        for statement_idx in 0..self.statements.len() {
+            let my_statement = &self.statements[statement_idx];
+            let other_statement = &other.statements[statement_idx];
+
+            match (my_statement, other_statement) {
+                // Both are def statements.
+                (
+                    Statement::Def {
+                        def_name: def_name_1,
+                        def_body_idx: def_body_idx_1,
+                    },
+                    Statement::Def {
+                        def_name: def_name_2,
+                        def_body_idx: def_body_idx_2,
+                    },
+                ) => {
+                    if (def_name_1 != def_name_2)
+                        || !expr_nodes_are_equal(*def_body_idx_1, *def_body_idx_2, self, other)
+                    {
+                        return false;
+                    }
+                }
+
+                // Both are eval statements.
+                (
+                    Statement::Eval {
+                        eval_body_idx: eval_body_idx_1,
+                    },
+                    Statement::Eval {
+                        eval_body_idx: eval_body_idx_2,
+                    },
+                ) => {
+                    if !expr_nodes_are_equal(*eval_body_idx_1, *eval_body_idx_2, self, other) {
+                        return false;
+                    }
+                }
+
+                // Enum variant mismatch.
+                _ => {
+                    return false;
+                }
+            }
+        }
+
+        return true;
+    }
 }
 
 // Helper function to produce a string representation of an ExprNode.
