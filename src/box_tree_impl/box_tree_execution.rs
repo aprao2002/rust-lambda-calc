@@ -1,4 +1,7 @@
-use std::collections::{HashMap, HashSet};
+use std::{
+    collections::{HashMap, HashSet},
+    hash::Hash,
+};
 
 use crate::box_tree_impl::box_tree_ast::{
     get_all_free_variables, get_all_variables, make_def_map, rename_variable, ExprNode, Statement,
@@ -33,22 +36,19 @@ fn perform_alpha_conversion(
 // with var_value. Performs alpha conversion while doing substitutions if
 // needed.
 fn perform_beta_reduction_helper(
-    expr_body: &ExprNode,
+    expr_body: &mut ExprNode,
     var_name: &str,
     var_value: &ExprNode,
     value_free_vars: &HashSet<&str>,
-) -> Box<ExprNode> {
+) {
     match expr_body {
         // Substitute into variable.
         ExprNode::Var {
             var_name: curr_var_name,
         } => {
             if curr_var_name == var_name {
-                return Box::new(var_value.clone());
+                *expr_body = var_value.clone();
             }
-            return Box::new(ExprNode::Var {
-                var_name: curr_var_name.clone(),
-            });
         }
 
         // Substitute onto function application.
@@ -56,15 +56,8 @@ fn perform_beta_reduction_helper(
             fn_body,
             actual_arg,
         } => {
-            let subbed_fn_body =
-                perform_beta_reduction_helper(&**fn_body, var_name, var_value, value_free_vars);
-            let subbed_actual_arg =
-                perform_beta_reduction_helper(&*actual_arg, var_name, var_value, value_free_vars);
-
-            return Box::new(ExprNode::FnApp {
-                fn_body: subbed_fn_body,
-                actual_arg: subbed_actual_arg,
-            });
+            perform_beta_reduction_helper(&mut **fn_body, var_name, var_value, value_free_vars);
+            perform_beta_reduction_helper(&mut **actual_arg, var_name, var_value, value_free_vars);
         }
 
         // Substitute onto function definition.
@@ -78,59 +71,24 @@ fn perform_beta_reduction_helper(
                 // To prevent variable capture, perform alpha conversion if
                 // var_value contains formal_param as a free variable.
                 if value_free_vars.contains(formal_param.as_str()) {
-                    let mut final_fn_body = Box::new((**fn_body).clone());
-
                     perform_alpha_conversion(
                         formal_param.as_str(),
-                        &mut *final_fn_body,
+                        &mut **fn_body,
                         value_free_vars,
                     );
+                }
 
-                    return Box::new(ExprNode::FnDef {
-                        formal_param: formal_param.clone(),
-                        fn_body: perform_beta_reduction_helper(
-                            &*final_fn_body,
-                            var_name,
-                            var_value,
-                            value_free_vars,
-                        ),
-                    });
-                }
-                // Directly perform beta reduction if var_value does not
-                // contain formal_param as a free variable.
-                else {
-                    // Perform the beta reduction into the function body.
-                    return Box::new(ExprNode::FnDef {
-                        formal_param: formal_param.clone(),
-                        fn_body: perform_beta_reduction_helper(
-                            &*fn_body,
-                            var_name,
-                            var_value,
-                            value_free_vars,
-                        ),
-                    });
-                }
+                perform_beta_reduction_helper(&mut **fn_body, var_name, var_value, value_free_vars);
             }
-
-            // Return a copy of the pre-existing program if the formal_param
-            // shadows the variable's name that we are substituting for.
-            return Box::new(ExprNode::FnDef {
-                formal_param: formal_param.clone(),
-                fn_body: fn_body.clone(),
-            });
         }
     };
 }
 
 // Performs beta reduction on expr_body, replacing instances of var_name
 // with var_value.
-fn perform_beta_reduction(
-    expr_body: &ExprNode,
-    var_name: &str,
-    var_value: &ExprNode,
-) -> Box<ExprNode> {
+fn perform_beta_reduction(expr_body: &mut ExprNode, var_name: &str, var_value: &ExprNode) {
     let value_free_vars = get_all_free_variables(var_value);
-    return perform_beta_reduction_helper(expr_body, var_name, var_value, &value_free_vars);
+    perform_beta_reduction_helper(expr_body, var_name, var_value, &value_free_vars);
 }
 
 // Performs lazy / normal order evaluation of a given lambda calculus
@@ -154,23 +112,22 @@ fn eval_expr_lazy(
                 fn_body,
                 actual_arg,
             } => {
-                // println!("In FnApp case.");
-
                 match *fn_body {
                     // The function being applied is a function definition, so
                     // we are at a redex.
                     ExprNode::FnDef {
                         formal_param,
-                        fn_body: defined_fn,
+                        fn_body: mut defined_fn,
                     } => {
                         parsed_left = false;
-                        // println!("In inner FnDef case.");
 
-                        expr_body = perform_beta_reduction(
-                            &*defined_fn,
+                        perform_beta_reduction(
+                            &mut *defined_fn,
                             formal_param.as_str(),
                             &*actual_arg,
                         );
+
+                        *expr_body = *defined_fn;
                         continue;
                     }
 
@@ -188,19 +145,21 @@ fn eval_expr_lazy(
                                 .clone(),
                             );
 
-                            expr_body = Box::new(ExprNode::FnApp {
+                            *expr_body = ExprNode::FnApp {
                                 fn_body: new_fn_body,
                                 actual_arg: actual_arg,
-                            });
+                            };
 
                             continue;
                         }
                         // The variable is not a def statement macro.
                         else {
-                            return Box::new(ExprNode::FnApp {
+                            *expr_body = ExprNode::FnApp {
                                 fn_body: Box::new(ExprNode::Var { var_name }),
                                 actual_arg: actual_arg,
-                            });
+                            };
+
+                            break;
                         }
                     }
 
@@ -212,14 +171,14 @@ fn eval_expr_lazy(
                                 println!("Recursing on {fn_body_val}.")
                             }
 
-                            expr_body = Box::new(ExprNode::FnApp {
+                            *expr_body = ExprNode::FnApp {
                                 fn_body: eval_expr_lazy(
                                     Box::new(fn_body_val),
                                     def_statement_map,
                                     verbose,
                                 ),
                                 actual_arg: actual_arg,
-                            });
+                            };
 
                             if verbose {
                                 println!("Recursion complete.")
@@ -228,10 +187,12 @@ fn eval_expr_lazy(
                             parsed_left = true;
                             continue;
                         } else {
-                            return Box::new(ExprNode::FnApp {
+                            *expr_body = ExprNode::FnApp {
                                 fn_body: Box::new(fn_body_val),
                                 actual_arg: actual_arg,
-                            });
+                            };
+
+                            break;
                         }
                     }
                 }
@@ -239,24 +200,27 @@ fn eval_expr_lazy(
 
             // The expr_body is not a function application, so it is not a
             // redex. Because of this, we can break.
-            expr_body => {
-                return Box::new(expr_body);
+            _ => {
+                break;
             }
         };
     }
+
+    return expr_body;
 }
 
 /// Execute a lambda calculus program.
-pub fn execute_program(program: &Vec<Statement>, verbose: bool) -> Vec<Box<ExprNode>> {
+pub fn execute_program(program: Vec<Statement>, verbose: bool) -> Vec<Box<ExprNode>> {
     // First build a map from def_name -> def_body.
-    let def_map = make_def_map(&program);
+    let cloned_program = program.clone();
+    let def_map = make_def_map(&cloned_program);
 
     // For each statement, if it is an eval, perform the evaluation.
     let mut exec_result: Vec<Box<ExprNode>> = Vec::new();
 
     for statement in program {
         if let Statement::Eval { eval_body } = statement {
-            exec_result.push(eval_expr_lazy(eval_body.clone(), &def_map, verbose));
+            exec_result.push(eval_expr_lazy(eval_body, &def_map, verbose));
         }
     }
 
@@ -281,7 +245,7 @@ mod tests {
         let program =
             parse_recursive_descent(&program_tokens).expect("Unable to parse program string.");
 
-        let exec_result = execute_program(&program, true);
+        let exec_result = execute_program(program, true);
 
         let exec_string_results: Vec<String> = exec_result
             .iter()
