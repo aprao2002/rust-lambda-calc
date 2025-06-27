@@ -1,3 +1,6 @@
+//! A simple lexer that converts a program given as a string into a vector of
+//! tokens.
+
 use std::usize;
 
 use lazy_static::lazy_static;
@@ -27,17 +30,17 @@ pub struct Token {
     pub line_num: usize,
 }
 
-// Represents how to recognize a token class.
+/// Represents how to recognize a token class.
 #[derive(Debug)]
 struct TokenRule {
     token_class: TokenClass,
     regex: Regex,
 }
 
-// Vector of regex patterns that correspond to each token class. The 'token_text'
-// capture group in each regex will be used to populate the token_text field of
-// Token objects.
 lazy_static! {
+    /// Vector of regex patterns that correspond to each token class. The 'token_text'
+    /// capture group in each regex will be used to populate the token_text field of
+    /// Token objects.
     static ref token_rules: Vec<TokenRule> = vec![
         TokenRule {
             token_class: TokenClass::Def,
@@ -87,24 +90,24 @@ lazy_static! {
     ];
 }
 
-// Gets the rule for a specific token class.
+/// Gets the rule for a specific token class.
 fn get_rule_for_token_class(token_class: TokenClass) -> Option<&'static TokenRule> {
     token_rules
         .iter()
         .find(|token_rule| token_rule.token_class == token_class)
 }
 
-// Finds the rule that matches the most characters from the start of the input
-// string.
+/// Finds the rule that matches the most characters from the start of the input
+/// string.
 #[derive(Debug)]
 struct RuleApplicationResult<'a> {
     token_rule: &'static TokenRule,
     token_text: &'a str,
 }
 
-// Allows equality comparisons between RuleApplicationResult objects. Compares
-// the objects by (1) making sure they point to the same token_rule, and (2)
-// contain the same token_text.
+/// Allows equality comparisons between RuleApplicationResult objects. Compares
+/// the objects by (1) making sure they point to the same token_rule, and (2)
+/// contain the same token_text.
 impl<'a> PartialEq for RuleApplicationResult<'a> {
     fn eq(&self, other: &Self) -> bool {
         return std::ptr::eq(self.token_rule, other.token_rule)
@@ -112,7 +115,7 @@ impl<'a> PartialEq for RuleApplicationResult<'a> {
     }
 }
 
-// Counts the number of occurrences of target_char in in_str.
+/// Counts the number of occurrences of target_char in in_str.
 fn count_occurrences(in_str: &str, target_char: char) -> usize {
     return in_str
         .chars()
@@ -120,9 +123,9 @@ fn count_occurrences(in_str: &str, target_char: char) -> usize {
         .count();
 }
 
-// Finds the lexer rule that matches the longest substring starting from the
-// start of input_str, and returns a RuleApplicationResult object describing the
-// match.
+/// Finds the lexer rule that matches the longest substring starting from the
+/// start of input_str, and returns a RuleApplicationResult object describing the
+/// match.
 fn apply_longest_matching_rule<'a>(input_str: &'a str) -> RuleApplicationResult<'a> {
     let mut out_token_rule = get_rule_for_token_class(TokenClass::Error)
         .expect("Unable to find token rule for Error token class.");
@@ -145,8 +148,8 @@ fn apply_longest_matching_rule<'a>(input_str: &'a str) -> RuleApplicationResult<
     };
 }
 
-// Merges a sequence of error tokens into a single error token. Assumes that the
-// input vector contains at least one error token.
+/// Merges a sequence of error tokens into a single error token. Assumes that the
+/// input vector contains at least one error token.
 fn merge_error_tokens(error_tokens: &Vec<Token>) -> Token {
     assert!(
         error_tokens.len() > 0,

@@ -1,3 +1,6 @@
+//! Recursive descent parser that constructs lambda-calculus programs in the
+//! box-tree representation given a vector of tokens.
+
 use crate::box_tree_impl::box_tree_ast::{DefStatement, EvalStatement, ExprNode, Program};
 use crate::lexical_analysis::{Token, TokenClass};
 
@@ -17,7 +20,7 @@ pub enum ParseError {
     UnexpectedEndOfInput,
 }
 
-// Tries to parse a token of the requested class at tokens[start_idx].
+/// Tries to parse a token of the requested class at tokens[start_idx].
 fn try_token_class(
     tokens: &Vec<Token>,
     start_idx: usize,
@@ -39,7 +42,7 @@ fn try_token_class(
     };
 }
 
-// Tries to parse a token containing the requested text at tokens[start_idx].
+/// Tries to parse a token containing the requested text at tokens[start_idx].
 fn try_token_text<'a, 'b>(
     tokens: &'a Vec<Token>,
     start_idx: usize,
@@ -61,7 +64,7 @@ fn try_token_text<'a, 'b>(
     };
 }
 
-// Tries to parse an expression that looks like `\[IDENTIFIER].[EXPR]`.
+/// Tries to parse an expression that looks like `\[IDENTIFIER].[EXPR]`.
 fn try_lambda_rule(
     tokens: &Vec<Token>,
     start_idx: usize,
@@ -81,7 +84,7 @@ fn try_lambda_rule(
     ));
 }
 
-// Tries to parse an expression that looks like `([EXPR])`.
+/// Tries to parse an expression that looks like `([EXPR])`.
 fn try_parenthesis_expr_rule(
     tokens: &Vec<Token>,
     start_idx: usize,
@@ -93,7 +96,7 @@ fn try_parenthesis_expr_rule(
     return Ok((expr_node, start_idx));
 }
 
-// Tries to parse an expression that looks like `[IDENTIFIER]`.
+/// Tries to parse an expression that looks like `[IDENTIFIER]`.
 fn try_var_expr_rule(
     tokens: &Vec<Token>,
     start_idx: usize,
@@ -108,7 +111,7 @@ fn try_var_expr_rule(
     ));
 }
 
-// Tries to parse according to the production `atom -> (e) | v`.
+/// Tries to parse according to the production `atom -> (e) | v`.
 fn try_atom_rule(
     tokens: &Vec<Token>,
     start_idx: usize,
@@ -117,9 +120,9 @@ fn try_atom_rule(
         .or_else(|_| try_var_expr_rule(tokens, start_idx));
 }
 
-// Tries to parse chains of function applications. uses the right-associative
-// rule app -> atom e | atom, but parses the sequence of terms using a loop that
-// 'fixes' the output to be left-associative.
+/// Tries to parse chains of function applications. uses the right-associative
+/// rule app -> atom e | atom, but parses the sequence of terms using a loop that
+/// 'fixes' the output to be left-associative.
 fn try_application_rule(
     tokens: &Vec<Token>,
     start_idx: usize,
@@ -153,7 +156,7 @@ fn try_application_rule(
     return Ok((out_expr, start_idx));
 }
 
-// Tries to parse according to the production `e -> lambda | non_lam`.
+/// Tries to parse according to the production `e -> lambda | non_lam`.
 fn try_expr_rule(
     tokens: &Vec<Token>,
     start_idx: usize,
@@ -161,7 +164,7 @@ fn try_expr_rule(
     return try_lambda_rule(tokens, start_idx).or_else(|_| try_application_rule(tokens, start_idx));
 }
 
-// Tries to parse a `def` statement.
+/// Tries to parse a `def` statement.
 fn try_def_statement_rule(
     tokens: &Vec<Token>,
     start_idx: usize,
@@ -181,7 +184,7 @@ fn try_def_statement_rule(
     ));
 }
 
-// Tries to parse an `eval` statement.
+/// Tries to parse an `eval` statement.
 fn try_eval_statement_rule(
     tokens: &Vec<Token>,
     start_idx: usize,
@@ -198,8 +201,8 @@ fn try_eval_statement_rule(
     ));
 }
 
-/// Uses recursive descent to parse the given vector of tokens into a vector of
-/// `def` or `eval` statements.
+/// Uses recursive descent to parse the given vector of tokens into a `Program`
+/// object (see the `box_tree_ast` module).
 ///
 /// Assumes that the input token vector has discarded whitespace and comments
 /// (i.e. it was produced via run_lexical_analysis with

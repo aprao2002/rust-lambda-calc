@@ -1,15 +1,18 @@
+//! Executes lambda-calculus programs given in the box-tree program
+//! representation.
+
 use std::collections::{HashMap, HashSet};
 
 use crate::box_tree_impl::box_tree_ast::{
     get_all_free_variables, get_all_variables, make_def_map, rename_variable, ExprNode, Program,
 };
 
-/// Represents the result of a program execution.
+/// Represents the result of box-tree program execution.
 pub type ExecutionResult = Vec<Box<ExprNode>>;
 
-// Given an ExprNode, a formal param to rename, and the free variables of a
-// value being substituted into the ExprNode, rename the formal_param so that
-// we don't accidentally introduce new references to the formal_param.
+/// Given an ExprNode, a formal param to rename, and the free variables of a
+/// value being substituted into the ExprNode, rename the formal_param so that
+/// we don't accidentally introduce new references to the formal_param.
 fn perform_alpha_conversion(
     formal_param: &str,
     fn_body: &mut ExprNode,
@@ -32,9 +35,9 @@ fn perform_alpha_conversion(
     rename_variable(formal_param, new_formal_param.as_str(), fn_body);
 }
 
-// Performs beta reduction on expr_body, substituting instances of var_name
-// with var_value. Performs alpha conversion while doing substitutions if
-// needed.
+/// Performs beta reduction on expr_body, substituting instances of var_name
+/// with var_value. Performs alpha conversion while doing substitutions if
+/// needed.
 fn perform_beta_reduction_helper(
     expr_body: &mut ExprNode,
     var_name: &str,
@@ -84,8 +87,8 @@ fn perform_beta_reduction_helper(
     };
 }
 
-// Performs beta reduction on expr_body, replacing instances of var_name
-// with var_value.
+/// Performs beta reduction on expr_body, replacing instances of var_name
+/// with var_value.
 fn perform_beta_reduction(expr_body: &mut ExprNode, var_name: &str, var_value: &ExprNode) {
     let value_free_vars = get_all_free_variables(var_value);
     perform_beta_reduction_helper(expr_body, var_name, var_value, &value_free_vars);
@@ -97,10 +100,10 @@ fn dummy_value() -> Box<ExprNode> {
     });
 }
 
-// Performs lazy evaluation of a given lambda calculus expression until it is
-// in weak-head normal form. Returns a Box holding the evaluated expression, 
-// and a boolean saying whether the result is different from the input 
-// expression.
+/// Performs lazy evaluation of a given lambda calculus expression until it is
+/// in weak-head normal form. Returns a Box holding the evaluated expression,
+/// and a boolean saying whether the result is different from the input
+/// expression.
 fn eval_expr_lazy(
     mut expr_body: Box<ExprNode>,
     def_statement_map: &HashMap<&str, &ExprNode>,
@@ -203,7 +206,7 @@ fn eval_expr_lazy(
     return (expr_body, change_made);
 }
 
-/// Execute a lambda calculus program.
+/// Execute a lambda calculus program in box-tree representation.
 pub fn execute_program(program: Program, verbose: bool) -> ExecutionResult {
     // First build a map from def_name -> def_body.
     let def_map = make_def_map(&program.def_statements);

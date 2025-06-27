@@ -1,5 +1,13 @@
-/// Data structures to represent lambda calculus expressions, and some utility
-/// functions to display and manipulate them.
+//! Data structures to represent lambda calculus expressions, and some utility
+//! functions to display and manipulate them.
+//!
+//! The box_tree_impl represents expressions as an enum `ExprNode` that is
+//! either a `FnDef`, `FnApp`, or `Var`. Links between `ExprNodes` are formed 
+//! by `Box<ExprNode>` fields inside each `ExprNode`.
+//!
+//! Programs are represented by two vectors: one of `DefStatements`, another of
+//! `EvalStatements`.
+
 use std::collections::{HashMap, HashSet};
 
 /// Represents macros defined via 'def' statements.
@@ -38,7 +46,7 @@ pub struct Program {
     pub eval_statements: Vec<EvalStatement>,
 }
 
-// Helper function to produce a string representation of an ExprNode.
+/// Helper function to produce a string representation of an ExprNode.
 fn expr_node_to_string_helper(expr_node: &ExprNode, string_so_far: &mut String) {
     match expr_node {
         ExprNode::Var { var_name } => {
@@ -73,8 +81,6 @@ fn expr_node_to_string_helper(expr_node: &ExprNode, string_so_far: &mut String) 
                 _ => {}
             }
 
-            // string_so_far.push('(');
-
             if first_needs_parens {
                 string_so_far.push('(');
                 expr_node_to_string_helper(fn_body, string_so_far);
@@ -92,8 +98,6 @@ fn expr_node_to_string_helper(expr_node: &ExprNode, string_so_far: &mut String) 
             } else {
                 expr_node_to_string_helper(actual_arg, string_so_far);
             }
-
-            // string_so_far.push(')');
         }
         ExprNode::FnDef {
             formal_param,
@@ -105,20 +109,22 @@ fn expr_node_to_string_helper(expr_node: &ExprNode, string_so_far: &mut String) 
     };
 }
 
-// Converts an expr node to a string.
+/// Converts an expr node to a string.
 pub fn expr_node_to_string(expr_node: &ExprNode) -> String {
     let mut out_string = String::new();
     expr_node_to_string_helper(expr_node, &mut out_string);
     return out_string;
 }
 
-// Display trait implementation for ExprNode using expr_node_to_string function.
+/// Display trait implementation for ExprNode using expr_node_to_string 
+/// function.
 impl std::fmt::Display for ExprNode {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         return write!(f, "{}", expr_node_to_string(self).as_str());
     }
 }
 
+/// Display trait implementation for Program.
 impl std::fmt::Display for Program {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let mut out_strs = Vec::new();
