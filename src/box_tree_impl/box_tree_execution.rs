@@ -1,11 +1,11 @@
-use std::{
-    collections::{HashMap, HashSet},
-    hash::Hash,
-};
+use std::collections::{HashMap, HashSet};
 
 use crate::box_tree_impl::box_tree_ast::{
-    get_all_free_variables, get_all_variables, make_def_map, rename_variable, ExprNode, Statement,
+    get_all_free_variables, get_all_variables, make_def_map, rename_variable, ExprNode, Program,
 };
+
+/// Represents the result of a program execution.
+pub type ExecutionResult = Vec<Box<ExprNode>>;
 
 // Given an ExprNode, a formal param to rename, and the free variables of a
 // value being substituted into the ExprNode, rename the formal_param so that
@@ -91,14 +91,14 @@ fn perform_beta_reduction(expr_body: &mut ExprNode, var_name: &str, var_value: &
     perform_beta_reduction_helper(expr_body, var_name, var_value, &value_free_vars);
 }
 
-// Performs lazy / normal order evaluation of a given lambda calculus
-// expression.
+// Performs lazy evaluation of a given lambda calculus expression until it is
+// in weak-head normal form.
 fn eval_expr_lazy(
     mut expr_body: Box<ExprNode>,
     def_statement_map: &HashMap<&str, &ExprNode>,
     verbose: bool,
-) -> Box<ExprNode> {
-    let mut parsed_left = false;
+) -> (Box<ExprNode>, bool) {
+    let mut change_made = false;
 
     // Keep trying to apply substitution until we are no longer at a redex.
     loop {
@@ -119,8 +119,6 @@ fn eval_expr_lazy(
                         formal_param,
                         fn_body: mut defined_fn,
                     } => {
-                        parsed_left = false;
-
                         perform_beta_reduction(
                             &mut *defined_fn,
                             formal_param.as_str(),
@@ -128,14 +126,14 @@ fn eval_expr_lazy(
                         );
 
                         *expr_body = *defined_fn;
+
+                        change_made = true;
                         continue;
                     }
 
                     // The function being applied is a variable name. First
                     // expand it if it is actually a def statement macro.
                     ExprNode::Var { var_name } => {
-                        parsed_left = false;
-
                         // The variable is a def statement macro.
                         if def_statement_map.contains_key(var_name.as_str()) {
                             let new_fn_body = Box::new(
@@ -150,6 +148,7 @@ fn eval_expr_lazy(
                                 actual_arg: actual_arg,
                             };
 
+                            change_made = true;
                             continue;
                         }
                         // The variable is not a def statement macro.
@@ -166,32 +165,26 @@ fn eval_expr_lazy(
                     // The inner function is a function application, so evaluate
                     // the inner function.
                     fn_body_val => {
-                        if !parsed_left {
-                            if verbose {
-                                println!("Recursing on {fn_body_val}.")
-                            }
+                        if verbose {
+                            println!("Recursing on {fn_body_val}.")
+                        }
 
-                            *expr_body = ExprNode::FnApp {
-                                fn_body: eval_expr_lazy(
-                                    Box::new(fn_body_val),
-                                    def_statement_map,
-                                    verbose,
-                                ),
-                                actual_arg: actual_arg,
-                            };
+                        let (new_fn_body, new_fn_body_is_different) =
+                            eval_expr_lazy(Box::new(fn_body_val), def_statement_map, verbose);
 
-                            if verbose {
-                                println!("Recursion complete.")
-                            }
+                        *expr_body = ExprNode::FnApp {
+                            fn_body: new_fn_body,
+                            actual_arg: actual_arg,
+                        };
 
-                            parsed_left = true;
+                        if verbose {
+                            println!("Recursion complete.")
+                        }
+
+                        if new_fn_body_is_different {
+                            change_made = true;
                             continue;
                         } else {
-                            *expr_body = ExprNode::FnApp {
-                                fn_body: Box::new(fn_body_val),
-                                actual_arg: actual_arg,
-                            };
-
                             break;
                         }
                     }
@@ -206,22 +199,20 @@ fn eval_expr_lazy(
         };
     }
 
-    return expr_body;
+    return (expr_body, change_made);
 }
 
 /// Execute a lambda calculus program.
-pub fn execute_program(program: Vec<Statement>, verbose: bool) -> Vec<Box<ExprNode>> {
+pub fn execute_program(program: Program, verbose: bool) -> ExecutionResult {
     // First build a map from def_name -> def_body.
-    let cloned_program = program.clone();
-    let def_map = make_def_map(&cloned_program);
+    let def_map = make_def_map(&program.def_statements);
 
     // For each statement, if it is an eval, perform the evaluation.
     let mut exec_result: Vec<Box<ExprNode>> = Vec::new();
 
-    for statement in program {
-        if let Statement::Eval { eval_body } = statement {
-            exec_result.push(eval_expr_lazy(eval_body, &def_map, verbose));
-        }
+    for eval_statement in program.eval_statements {
+        let (eval_result, _) = eval_expr_lazy(eval_statement.eval_body, &def_map, verbose);
+        exec_result.push(eval_result);
     }
 
     return exec_result;

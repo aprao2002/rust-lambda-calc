@@ -1,4 +1,4 @@
-use crate::box_tree_impl::box_tree_ast::{ExprNode, Statement};
+use crate::box_tree_impl::box_tree_ast::{DefStatement, EvalStatement, ExprNode, Program};
 use crate::lexical_analysis::{Token, TokenClass};
 
 /// Represents a parsing error.
@@ -165,7 +165,7 @@ fn try_expr_rule(
 fn try_def_statement_rule(
     tokens: &Vec<Token>,
     start_idx: usize,
-) -> Result<(Statement, usize), ParseError> {
+) -> Result<(DefStatement, usize), ParseError> {
     let (_, start_idx) = try_token_class(tokens, start_idx, TokenClass::Def)?;
     let (def_name_token, start_idx) = try_token_class(tokens, start_idx, TokenClass::Identifier)?;
     let (_, start_idx) = try_token_class(tokens, start_idx, TokenClass::Equals)?;
@@ -173,7 +173,7 @@ fn try_def_statement_rule(
     let (_, start_idx) = try_token_class(tokens, start_idx, TokenClass::Semicolon)?;
 
     return Ok((
-        Statement::Def {
+        DefStatement {
             def_name: def_name_token.token_text.clone(),
             def_body: def_body,
         },
@@ -185,26 +185,17 @@ fn try_def_statement_rule(
 fn try_eval_statement_rule(
     tokens: &Vec<Token>,
     start_idx: usize,
-) -> Result<(Statement, usize), ParseError> {
+) -> Result<(EvalStatement, usize), ParseError> {
     let (_, start_idx) = try_token_class(tokens, start_idx, TokenClass::Eval)?;
     let (eval_body_box, start_idx) = try_expr_rule(tokens, start_idx)?;
     let (_, start_idx) = try_token_class(tokens, start_idx, TokenClass::Semicolon)?;
 
     return Ok((
-        Statement::Eval {
+        EvalStatement {
             eval_body: eval_body_box,
         },
         start_idx,
     ));
-}
-
-// Tries to parse a `def` or `eval` statement.
-fn try_statement_rule(
-    tokens: &Vec<Token>,
-    start_idx: usize,
-) -> Result<(Statement, usize), ParseError> {
-    return try_def_statement_rule(tokens, start_idx)
-        .or_else(|_| try_eval_statement_rule(tokens, start_idx));
 }
 
 /// Uses recursive descent to parse the given vector of tokens into a vector of
@@ -213,17 +204,36 @@ fn try_statement_rule(
 /// Assumes that the input token vector has discarded whitespace and comments
 /// (i.e. it was produced via run_lexical_analysis with
 /// `discard_uninteresting = true`).
-pub fn parse_recursive_descent(tokens: &Vec<Token>) -> Result<Vec<Statement>, ParseError> {
-    let mut statements = Vec::new();
+pub fn parse_recursive_descent(tokens: &Vec<Token>) -> Result<Program, ParseError> {
+    let mut def_statements = Vec::new();
+    let mut eval_statements = Vec::new();
+
     let mut start_idx = 0;
 
     while start_idx < tokens.len() {
-        let (statement, new_idx) = try_statement_rule(tokens, start_idx)?;
-        statements.push(statement);
-        start_idx = new_idx;
+        if let Ok((def_statement, new_start_idx)) = try_def_statement_rule(tokens, start_idx) {
+            def_statements.push(def_statement);
+            start_idx = new_start_idx;
+            continue;
+        }
+
+        match try_eval_statement_rule(tokens, start_idx) {
+            Ok((eval_statement, new_start_idx)) => {
+                eval_statements.push(eval_statement);
+                start_idx = new_start_idx;
+                continue;
+            }
+
+            Err(parse_error) => {
+                return Err(parse_error);
+            }
+        }
     }
 
-    return Ok(statements);
+    return Ok(Program {
+        def_statements: def_statements,
+        eval_statements: eval_statements,
+    });
 }
 
 #[cfg(test)]
@@ -240,15 +250,18 @@ mod tests {
         let program_tokens = run_lexical_analysis(program_str, true);
 
         // Initialize the expected output.
-        let expected_output = vec![Statement::Def {
-            def_name: String::from("identity"),
-            def_body: Box::new(ExprNode::FnDef {
-                formal_param: String::from("x"),
-                fn_body: Box::new(ExprNode::Var {
-                    var_name: String::from("x"),
+        let expected_output = Program {
+            def_statements: vec![DefStatement {
+                def_name: String::from("identity"),
+                def_body: Box::new(ExprNode::FnDef {
+                    formal_param: String::from("x"),
+                    fn_body: Box::new(ExprNode::Var {
+                        var_name: String::from("x"),
+                    }),
                 }),
-            }),
-        }];
+            }],
+            eval_statements: vec![],
+        };
 
         // Run the parser.
         let generated_output = parse_recursive_descent(&program_tokens)
@@ -266,22 +279,25 @@ mod tests {
         let program_tokens = run_lexical_analysis(program_str, true);
 
         // Initialize the expected output.
-        let expected_output = vec![Statement::Eval {
-            eval_body: Box::new(ExprNode::FnApp {
-                fn_body: Box::new(ExprNode::FnDef {
-                    formal_param: String::from("x"),
-                    fn_body: Box::new(ExprNode::Var {
-                        var_name: String::from("x"),
+        let expected_output = Program {
+            def_statements: vec![],
+            eval_statements: vec![EvalStatement {
+                eval_body: Box::new(ExprNode::FnApp {
+                    fn_body: Box::new(ExprNode::FnDef {
+                        formal_param: String::from("x"),
+                        fn_body: Box::new(ExprNode::Var {
+                            var_name: String::from("x"),
+                        }),
+                    }),
+                    actual_arg: Box::new(ExprNode::FnDef {
+                        formal_param: String::from("y"),
+                        fn_body: Box::new(ExprNode::Var {
+                            var_name: String::from("y"),
+                        }),
                     }),
                 }),
-                actual_arg: Box::new(ExprNode::FnDef {
-                    formal_param: String::from("y"),
-                    fn_body: Box::new(ExprNode::Var {
-                        var_name: String::from("y"),
-                    }),
-                }),
-            }),
-        }];
+            }],
+        };
 
         // Run the parser.
         let generated_output = parse_recursive_descent(&program_tokens)
@@ -299,21 +315,24 @@ mod tests {
         let program_tokens = run_lexical_analysis(program_str, true);
 
         // Initialize the expected output.
-        let expected_output = vec![Statement::Eval {
-            eval_body: Box::new(ExprNode::FnApp {
-                fn_body: Box::new(ExprNode::FnApp {
-                    fn_body: Box::new(ExprNode::Var {
-                        var_name: String::from("var_1"),
+        let expected_output = Program {
+            def_statements: vec![],
+            eval_statements: vec![EvalStatement {
+                eval_body: Box::new(ExprNode::FnApp {
+                    fn_body: Box::new(ExprNode::FnApp {
+                        fn_body: Box::new(ExprNode::Var {
+                            var_name: String::from("var_1"),
+                        }),
+                        actual_arg: Box::new(ExprNode::Var {
+                            var_name: String::from("var_2"),
+                        }),
                     }),
                     actual_arg: Box::new(ExprNode::Var {
-                        var_name: String::from("var_2"),
+                        var_name: String::from("var_3"),
                     }),
                 }),
-                actual_arg: Box::new(ExprNode::Var {
-                    var_name: String::from("var_3"),
-                }),
-            }),
-        }];
+            }],
+        };
 
         // Run the parser.
         let generated_output = parse_recursive_descent(&program_tokens)
@@ -331,21 +350,24 @@ mod tests {
         let program_tokens = run_lexical_analysis(program_str, true);
 
         // Initialize the expected output.
-        let expected_output = vec![Statement::Eval {
-            eval_body: Box::new(ExprNode::FnApp {
-                fn_body: Box::new(ExprNode::Var {
-                    var_name: String::from("var_1"),
-                }),
-                actual_arg: Box::new(ExprNode::FnApp {
+        let expected_output = Program {
+            def_statements: vec![],
+            eval_statements: vec![EvalStatement {
+                eval_body: Box::new(ExprNode::FnApp {
                     fn_body: Box::new(ExprNode::Var {
-                        var_name: String::from("var_2"),
+                        var_name: String::from("var_1"),
                     }),
-                    actual_arg: Box::new(ExprNode::Var {
-                        var_name: String::from("var_3"),
+                    actual_arg: Box::new(ExprNode::FnApp {
+                        fn_body: Box::new(ExprNode::Var {
+                            var_name: String::from("var_2"),
+                        }),
+                        actual_arg: Box::new(ExprNode::Var {
+                            var_name: String::from("var_3"),
+                        }),
                     }),
                 }),
-            }),
-        }];
+            }],
+        };
 
         // Run the parser.
         let generated_output = parse_recursive_descent(&program_tokens)
@@ -364,31 +386,34 @@ mod tests {
         let program_tokens = run_lexical_analysis(program_str, true);
 
         // Initialize the expected output.
-        let expected_output = vec![Statement::Def {
-            def_name: String::from("test"),
-            def_body: Box::new(ExprNode::FnApp {
-                fn_body: Box::new(ExprNode::FnDef {
-                    formal_param: String::from("a"),
-                    fn_body: Box::new(ExprNode::FnApp {
-                        fn_body: Box::new(ExprNode::Var {
-                            var_name: String::from("a"),
-                        }),
-                        actual_arg: Box::new(ExprNode::FnDef {
-                            formal_param: String::from("b"),
+        let expected_output = Program {
+            def_statements: vec![DefStatement {
+                def_name: String::from("test"),
+                def_body: Box::new(ExprNode::FnApp {
+                    fn_body: Box::new(ExprNode::FnDef {
+                        formal_param: String::from("a"),
+                        fn_body: Box::new(ExprNode::FnApp {
                             fn_body: Box::new(ExprNode::Var {
-                                var_name: String::from("b"),
+                                var_name: String::from("a"),
+                            }),
+                            actual_arg: Box::new(ExprNode::FnDef {
+                                formal_param: String::from("b"),
+                                fn_body: Box::new(ExprNode::Var {
+                                    var_name: String::from("b"),
+                                }),
                             }),
                         }),
                     }),
-                }),
-                actual_arg: Box::new(ExprNode::FnDef {
-                    formal_param: String::from("c"),
-                    fn_body: Box::new(ExprNode::Var {
-                        var_name: String::from("c"),
+                    actual_arg: Box::new(ExprNode::FnDef {
+                        formal_param: String::from("c"),
+                        fn_body: Box::new(ExprNode::Var {
+                            var_name: String::from("c"),
+                        }),
                     }),
                 }),
-            }),
-        }];
+            }],
+            eval_statements: vec![],
+        };
 
         // Run the parser.
         let generated_output = parse_recursive_descent(&program_tokens)
@@ -409,10 +434,9 @@ mod tests {
         ";
         let program_tokens = run_lexical_analysis(program_str, true);
 
-        // Initialize the expected output.
-        let expected_output = vec![
+        let expected_def_statements = vec![
             // def zero = \f. \x. x;
-            Statement::Def {
+            DefStatement {
                 def_name: String::from("zero"),
                 def_body: Box::new(ExprNode::FnDef {
                     formal_param: String::from("f"),
@@ -425,7 +449,7 @@ mod tests {
                 }),
             },
             // def succ = \n. \f. \x. f (n f x);
-            Statement::Def {
+            DefStatement {
                 def_name: String::from("succ"),
                 def_body: Box::new(ExprNode::FnDef {
                     formal_param: String::from("n"),
@@ -455,8 +479,11 @@ mod tests {
                     }),
                 }),
             },
+        ];
+
+        let expected_eval_statements = vec![
             // eval succ zero;
-            Statement::Eval {
+            EvalStatement {
                 eval_body: Box::new(ExprNode::FnApp {
                     fn_body: Box::new(ExprNode::Var {
                         var_name: String::from("succ"),
@@ -467,6 +494,11 @@ mod tests {
                 }),
             },
         ];
+
+        let expected_output = Program {
+            def_statements: expected_def_statements,
+            eval_statements: expected_eval_statements,
+        };
 
         // Run the parser.
         let generated_output = parse_recursive_descent(&program_tokens)

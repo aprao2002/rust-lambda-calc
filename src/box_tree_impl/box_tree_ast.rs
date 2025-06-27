@@ -2,16 +2,17 @@
 /// functions to display and manipulate them.
 use std::collections::{HashMap, HashSet};
 
-/// Represents a 'def' or 'eval' statement.
-#[derive(Debug, PartialEq, Eq, Clone)]
-pub enum Statement {
-    Def {
-        def_name: String,
-        def_body: Box<ExprNode>,
-    },
-    Eval {
-        eval_body: Box<ExprNode>,
-    },
+/// Represents macros defined via 'def' statements.
+#[derive(PartialEq, Eq, Debug)]
+pub struct DefStatement {
+    pub def_name: String,
+    pub def_body: Box<ExprNode>,
+}
+
+/// Represents expressions to evaluate defined via 'eval' statements.
+#[derive(PartialEq, Eq, Debug)]
+pub struct EvalStatement {
+    pub eval_body: Box<ExprNode>,
 }
 
 /// Represents a lambda-calculus expression.
@@ -28,6 +29,13 @@ pub enum ExprNode {
     Var {
         var_name: String,
     },
+}
+
+/// Represents a lambda-calculus program.
+#[derive(PartialEq, Eq, Debug)]
+pub struct Program {
+    pub def_statements: Vec<DefStatement>,
+    pub eval_statements: Vec<EvalStatement>,
 }
 
 // Helper function to produce a string representation of an ExprNode.
@@ -111,45 +119,40 @@ impl std::fmt::Display for ExprNode {
     }
 }
 
-impl std::fmt::Display for Statement {
+impl std::fmt::Display for Program {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Statement::Def { def_name, def_body } => {
-                return write!(f, "def {} = {};", def_name, def_body);
-            }
-            Statement::Eval { eval_body } => {
-                return write!(f, "eval {};", eval_body);
-            }
+        let mut out_strs = Vec::new();
+
+        // Add def statements.
+        for def_statement in &self.def_statements {
+            out_strs.push(format!(
+                "def {} = {};",
+                def_statement.def_name, def_statement.def_body
+            ));
         }
+
+        // Add newline to separate def and eval.
+        out_strs.push(String::from(""));
+
+        // Add eval statements.
+        for eval_statement in &self.eval_statements {
+            out_strs.push(format!("eval {};", eval_statement.eval_body));
+        }
+
+        return write!(f, "{}", out_strs.join("\n"));
     }
 }
 
 /// Creates a map where keys are the names defined by 'def' statements and
 /// values are the corresponding ExprNodes they expand to.
-pub fn make_def_map(program: &Vec<Statement>) -> HashMap<&str, &ExprNode> {
+pub fn make_def_map(def_statements: &Vec<DefStatement>) -> HashMap<&str, &ExprNode> {
     let mut out: HashMap<&str, &ExprNode> = HashMap::new();
 
-    for statement in program {
-        if let Statement::Def { def_name, def_body } = statement {
-            out.insert(def_name.as_str(), &**def_body);
-        }
+    for def_statement in def_statements {
+        out.insert(def_statement.def_name.as_str(), &*def_statement.def_body);
     }
 
     return out;
-}
-
-/// Gets the names of all macros defined in a lambda calculus program with def
-/// statements.
-pub fn get_all_def_names(program: &Vec<Statement>) -> HashSet<&str> {
-    let mut all_def_names: HashSet<&str> = HashSet::new();
-
-    for statement in program {
-        if let Statement::Def { def_name, .. } = statement {
-            all_def_names.insert(def_name.as_str());
-        }
-    }
-
-    return all_def_names;
 }
 
 /// Computes the free variables in the given lambda calculus expression.
