@@ -1,0 +1,8 @@
+// Constructs a linked list and computes its length.
+
+def cons = \h. \t. \f. \x. f h (t f x);
+def nil = \f. \x. x;
+def test_list = cons e1 (cons e2 nil);
+def cons_case_fn = \h. \t. succ t; 
+
+eval test_list cons_case_fn zero;

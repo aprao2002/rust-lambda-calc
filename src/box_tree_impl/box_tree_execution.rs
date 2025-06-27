@@ -10,6 +10,17 @@ use crate::box_tree_impl::box_tree_ast::{
 /// Represents the result of box-tree program execution.
 pub type ExecutionResult = Vec<Box<ExprNode>>;
 
+/// Converts an ExecutionResult to a String.
+pub fn execution_result_to_string(execution_result: &ExecutionResult) -> String {
+    let mut out = vec![];
+
+    for expr_node_box in execution_result {
+        out.push((**expr_node_box).to_string());
+    }
+
+    return out.join("\n");
+}
+
 /// Given an ExprNode, a formal param to rename, and the free variables of a
 /// value being substituted into the ExprNode, rename the formal_param so that
 /// we don't accidentally introduce new references to the formal_param.

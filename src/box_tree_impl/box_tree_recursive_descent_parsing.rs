@@ -1,6 +1,8 @@
 //! Recursive descent parser that constructs lambda-calculus programs in the
 //! box-tree representation given a vector of tokens.
 
+use std::fmt::Display;
+
 use crate::box_tree_impl::box_tree_ast::{DefStatement, EvalStatement, ExprNode, Program};
 use crate::lexical_analysis::{Token, TokenClass};
 
@@ -18,6 +20,36 @@ pub enum ParseError {
         line_num: usize,
     },
     UnexpectedEndOfInput,
+}
+
+/// Display trait implementation for ParseError.
+impl Display for ParseError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::UnexpectedTokenClass {
+                expected_token_class,
+                found_token_class,
+                line_num,
+            } => {
+                return write!(f, "Unexpected token class in box tree recursive descent parsing at line {}. Expected: {:?}, found: {:?}.", line_num, expected_token_class, found_token_class);
+            }
+
+            Self::UnexpectedTokenString {
+                expected_token_string,
+                found_token_string,
+                line_num,
+            } => {
+                return write!(f, "Unexpected token string in box tree recursive descent parsing at line {}. Expected: {:?}, found: {:?}.",line_num,  expected_token_string, found_token_string);
+            }
+
+            Self::UnexpectedEndOfInput => {
+                return write!(
+                    f,
+                    "Unexpected end of input in box tree recursive descent parsing."
+                );
+            }
+        }
+    }
 }
 
 /// Tries to parse a token of the requested class at tokens[start_idx].
