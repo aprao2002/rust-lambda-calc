@@ -91,8 +91,16 @@ fn perform_beta_reduction(expr_body: &mut ExprNode, var_name: &str, var_value: &
     perform_beta_reduction_helper(expr_body, var_name, var_value, &value_free_vars);
 }
 
+fn dummy_value() -> Box<ExprNode> {
+    return Box::new(ExprNode::Var {
+        var_name: String::from(""),
+    });
+}
+
 // Performs lazy evaluation of a given lambda calculus expression until it is
-// in weak-head normal form.
+// in weak-head normal form. Returns a Box holding the evaluated expression, 
+// and a boolean saying whether the result is different from the input 
+// expression.
 fn eval_expr_lazy(
     mut expr_body: Box<ExprNode>,
     def_statement_map: &HashMap<&str, &ExprNode>,
@@ -106,18 +114,19 @@ fn eval_expr_lazy(
             println!("In eval_expr_lazy, expr_body is {}", &*expr_body);
         }
 
-        match *expr_body {
-            // The expr_body is a function application, so see if it is a redex.
+        // Inspect the topmost node of the AST.
+        match &mut *expr_body {
+            // The topmost node is a function application, so see if it is a redex.
             ExprNode::FnApp {
                 fn_body,
                 actual_arg,
             } => {
-                match *fn_body {
+                match &mut **fn_body {
                     // The function being applied is a function definition, so
                     // we are at a redex.
                     ExprNode::FnDef {
                         formal_param,
-                        fn_body: mut defined_fn,
+                        fn_body: defined_fn,
                     } => {
                         perform_beta_reduction(
                             &mut *defined_fn,
@@ -125,7 +134,7 @@ fn eval_expr_lazy(
                             &*actual_arg,
                         );
 
-                        *expr_body = *defined_fn;
+                        expr_body = std::mem::replace(defined_fn, dummy_value());
 
                         change_made = true;
                         continue;
@@ -143,21 +152,13 @@ fn eval_expr_lazy(
                                 .clone(),
                             );
 
-                            *expr_body = ExprNode::FnApp {
-                                fn_body: new_fn_body,
-                                actual_arg: actual_arg,
-                            };
+                            *fn_body = new_fn_body;
 
                             change_made = true;
                             continue;
                         }
                         // The variable is not a def statement macro.
                         else {
-                            *expr_body = ExprNode::FnApp {
-                                fn_body: Box::new(ExprNode::Var { var_name }),
-                                actual_arg: actual_arg,
-                            };
-
                             break;
                         }
                     }
@@ -169,13 +170,13 @@ fn eval_expr_lazy(
                             println!("Recursing on {fn_body_val}.")
                         }
 
-                        let (new_fn_body, new_fn_body_is_different) =
-                            eval_expr_lazy(Box::new(fn_body_val), def_statement_map, verbose);
+                        let (new_fn_body, new_fn_body_is_different) = eval_expr_lazy(
+                            std::mem::replace(fn_body, dummy_value()),
+                            def_statement_map,
+                            verbose,
+                        );
 
-                        *expr_body = ExprNode::FnApp {
-                            fn_body: new_fn_body,
-                            actual_arg: actual_arg,
-                        };
+                        *fn_body = new_fn_body;
 
                         if verbose {
                             println!("Recursion complete.")
