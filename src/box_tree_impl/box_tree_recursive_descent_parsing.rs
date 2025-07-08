@@ -153,8 +153,8 @@ fn try_atom_rule(
 }
 
 /// Tries to parse chains of function applications. uses the right-associative
-/// rule app -> atom e | atom, but parses the sequence of terms using a loop that
-/// 'fixes' the output to be left-associative.
+/// rule app -> atom app | atom | lambda, but parses the sequence of terms using
+/// a loop that 'fixes' the output to be left-associative.
 fn try_application_rule(
     tokens: &Vec<Token>,
     start_idx: usize,

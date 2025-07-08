@@ -3,7 +3,7 @@
 //!
 //! Example usage:
 //!
-//!     ./rust-lambda-calc \
+//!     cargo run -- \
 //!         --impl-name box_tree \
 //!         --src-filepath test_programs/linked_list_length.lc
 

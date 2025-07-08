@@ -1,0 +1,15 @@
+// Example of Church encoding of whole numbers.
+//
+// Expected output with lazy evaluation:
+//      x
+//      f (zero f x)
+//      f (one f x)
+
+def zero = \f. \x. x;
+def succ = \n. \f. \x. f (n f x);
+def one = succ zero;
+def two = succ one;
+
+eval zero f x;
+eval one f x;
+eval two f x;

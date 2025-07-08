@@ -1,4 +1,7 @@
 // Constructs a linked list and computes its length.
+//
+// Expected output with lazy evaluation: 
+//      succ (cons e2 nil cons_case_fn zero)
 
 def cons = \h. \t. \f. \x. f h (t f x);
 def nil = \f. \x. x;
